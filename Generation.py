@@ -1,6 +1,13 @@
 from Retrieve import hybrid_retrieve, bm25_model, collection
 import openai
-openai.api_key = "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"
+import os
+import dotenv
+from openai import OpenAI
+
+dotenv.load_dotenv()
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY")
+)
 
 query = "Rocky mountains' climate"
 
