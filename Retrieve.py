@@ -9,6 +9,7 @@ from nltk.tokenize import word_tokenize
 import tiktoken
 import numpy as np
 
+
 # Load Chroma client
 client = chromadb.PersistentClient(path="weather_chroma_store")
 collection = client.get_collection(name="weather_records")
@@ -56,7 +57,9 @@ disaster_prompts = [
 ]
 
 
-embedding_func = collection._embedding_function
+embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
+    model_name="BAAI/bge-small-en-v1.5"
+)
 
 disaster_embeddings = embedding_func(disaster_prompts)
 
@@ -88,7 +91,7 @@ bm25_corpus = [preprocess(doc) for doc in documents]
 bm25_model = BM25Okapi(bm25_corpus)
 
 #Hybrid retrieve function
-def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=5, bm25_weight=0.5, disaster_threshold = 0.3):
+def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=10, bm25_weight=0.3, disaster_threshold = 0.0):
     # BM25 retrieval
     tokenized_query = preprocess(query)
     bm25_scores = bm25_model.get_scores(tokenized_query)
@@ -96,7 +99,7 @@ def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=5, bm25_weight=0
     # Semantic retrieval
     semantic_results = chroma_collection.query(
         query_texts=[query],
-        n_results=len(documents)  # full similarity for alignment
+        n_results=200  # full similarity for alignment
     )
     semantic_docs = semantic_results["documents"][0]
     semantic_scores = semantic_results["distances"][0]  # cosine distances
@@ -119,6 +122,7 @@ def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=5, bm25_weight=0
         bm25_score = bm25_scores[i]
         sem_score = semantic_id_score_map.get(doc_id, 0)
         final_score = bm25_weight * bm25_score + (1 - bm25_weight) * sem_score
+
         # Calculate disaster similarity and eliminate the chunks that not related to prompt
         doc_emb = np.array(all_doc_embeddings[i])
         disaster_sim = max_disaster_similarity(doc_emb, disaster_embeddings)
@@ -132,11 +136,13 @@ def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=5, bm25_weight=0
     hybrid_scores.sort(reverse=True)
     return hybrid_scores[:top_k]
 
-# Example usage
-query = "Rocky Mountains"
-top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=5)
+
+query = "What human impact as a result of the storm violence?"
+top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=10)
+
+#evaluate_accuracy("C:/Users/14821/Desktop/RAG/QACandidate_Pool.csv")
 
 for i, (score, doc_id, doc, meta, dissim) in enumerate(top_docs):
-    print(f"\nRank {i+1} | Score: {score:.4f} | DisasterSim: {dissim:.4f} | ID: {doc_id} | Date: {meta['date']} | Weather: {meta['weather']}")
-    print(doc[:400] + ("..." if len(doc) > 400 else ""))
+    print(f"\nRank {i+1} | Score: {score:.4f} | DisasterSim: {dissim:.4f} | ID: {doc_id} | Date: {meta['date']} ")
+    print(f"Chunk Text:\n{doc}")
     print("=" * 80)
