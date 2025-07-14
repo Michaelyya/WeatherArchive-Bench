@@ -1,23 +1,25 @@
-from Retrieve import hybrid_retrieve, bm25_model, collection
-import openai
 import os
+import openai
 import dotenv
 from openai import OpenAI
+from Retrieve import hybrid_retrieve, bm25_model, collection
 
+# Load environment variables
 dotenv.load_dotenv()
-client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY")
-)
 
-query = "Rocky mountains' climate"
+# Initialize OpenAI client
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-# Get top 5 chunks
-top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=5)
+def generate_answer_from_retrieve(query, top_k=5, model="gpt-3.5-turbo"):
 
-# Combine the paragraphs
-context = "\n\n".join([doc for _, _, doc, _, _ in top_docs])
+    # Retrieve top_k document chunks
+    top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=top_k)
 
-prompt = f"""Use only the context below to answer the question.
+    # Combine retrieved document chunks into context
+    context = "\n\n".join([doc for _, _, doc, _, _ in top_docs])
+
+    # Construct prompt
+    prompt = f"""Use only the context below to answer the question.
 
 Context:
 {context}
@@ -27,13 +29,20 @@ Question:
 
 Answer:"""
 
-# LLM generate anwser
-response = openai.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": prompt}
-    ]
-)
+    try:
+        # Call OpenAI chat model
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=1024
+        )
 
-print("GPT：", response.choices[0].message.content)
+        return response.choices[0].message.content.strip()
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to generate answer: {e}")
+        return f"Error: {str(e)}"

@@ -137,12 +137,13 @@ def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=10, bm25_weight=
     return hybrid_scores[:top_k]
 
 
-query = "What human impact as a result of the storm violence?"
-top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=10)
+# query = "What human impact as a result of the storm violence?"
+# top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=10)
 
-#evaluate_accuracy("C:/Users/14821/Desktop/RAG/QACandidate_Pool.csv")
+# #evaluate_accuracy("C:/Users/14821/Desktop/RAG/QACandidate_Pool.csv")
 
-for i, (score, doc_id, doc, meta, dissim) in enumerate(top_docs):
-    print(f"\nRank {i+1} | Score: {score:.4f} | DisasterSim: {dissim:.4f} | ID: {doc_id} | Date: {meta['date']} ")
-    print(f"Chunk Text:\n{doc}")
-    print("=" * 80)
+
+# for i, (score, doc_id, doc, meta, dissim) in enumerate(top_docs):
+#     print(f"\nRank {i+1} | Score: {score:.4f} | DisasterSim: {dissim:.4f} | ID: {doc_id} | Date: {meta['date']} ")
+#     print(f"Chunk Text:\n{doc}")
+#     print("=" * 80)
