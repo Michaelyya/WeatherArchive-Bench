@@ -1,0 +1,71 @@
+query,correct_passage_context,generated_answer
+What specific infrastructure and agricultural impact did the British steamer Canopus experience due to the heavy gales in the United Kingdom?,"STORMY WEATHER Heavy gales over the United Kingdom Bourne weather on the Atlantic Disastrous loss of cattle shipments London, February 18 The weather continues very unsettled over the whole of the United Kingdom, and gales are reported at several stations The heavy gale which has raged at Penzance for the past two days has somewhat abated The wind is now blowing strongly from the southwest and the barometer marks 28.70 inches The gale is still blowing at Liverpool, but it has moderated a little London, February 18 The British steamer Canopus, Captain Horsfall, which arrived at Liverpool yesterday from Boston, lost her boats and 247 head of cattle, and sustained other damages in consequence of heavy weather Sports and Pastimes Curling Stuarton, X8, February 18 The curling match between the Truro and Stuarton clubs, which took place here today, resulted in a victory for Stuarton, which places the club in the van as good curlers Quebec, February 18 The Quebec Curling Club Challenge Cup was played for at the rink, St Charles street today, by the Montreal Caledonia Curling Club and the Quebec Curling Club The play was excellent on both sides, Quebec winning by 18 shots FEDERALIST London, February 19 At 2 a.m. the following was the score in the six days' walking match: Brown 328, Hazael 280, and """"Limping"""" Day 258, and going splendidly AQUATIC","{
+""region"": ""United Kingdom (Liverpool, Penzance, Atlantic route)"",
+""vulnerability"": {
+    ""exposure"": {
+        ""score"": 5,
+        ""evidence"": ""\""Heavy gales over the United Kingdom... The heavy gale which has raged at Penzance for the past two days... The gale is still blowing at Liverpool\"" indicates widespread, intense, and prolonged storm activity.""
+    },
+    ""sensitivity"": {
+        ""score"": 4,
+        ""evidence"": ""\""The British steamer Canopus... lost her boats and 247 head of cattle, and sustained other damages in consequence of heavy weather\"" demonstrates significant impact on both ship infrastructure and agricultural cargo.""
+    },
+    ""adaptability"": {
+        ""score"": 2,
+        ""evidence"": ""No evidence of successful mitigation or rapid recovery; the loss of boats and cattle suggests limited immediate adaptive capacity on the vessel.""
+    }
+},
+""resilience"": {
+    ""temporal_scale"": {
+        ""primary_focus"": ""short-term absorptive capacity"",
+        ""evidence"": ""Impacts described are immediate (loss of boats, cattle, and damages during the voyage), focusing on the vessel's ability to withstand and respond to the storm event.""
+    },
+    ""functional_system"": {
+        ""primary_focus"": [""transportation"", ""food""],
+        ""evidence"": ""\""Lost her boats\"" reflects transportation system vulnerability; \""247 head of cattle\"" lost highlights agricultural/food system impact.""
+    },
+    ""spatial_scale"": {
+        ""primary_focus"": ""regional"",
+        ""evidence"": ""Storm impacts are reported across multiple locations (Penzance, Liverpool, Atlantic), indicating effects at a regional scale.""
+    }
+},
+""question_answer"": {
+    ""question"": ""What specific infrastructure and agricultural impact did the British steamer Canopus experience due to the heavy gales in the United Kingdom?"",
+    ""answer"": ""The British steamer Canopus lost its boats (infrastructure) and 247 head of cattle (agricultural cargo) due to the heavy gales encountered en route to Liverpool. The vessel also sustained unspecified additional damages as a direct result of the severe weather.""
+}
+}"
+"How has the recent heavy rainstorm affected the logging and river navigation infrastructure in the Chippewa Valley, and what are the anticipated changes in operations as a result?","THE LM CROP, Eau Claire, Wis, March 30 A heavy rainstorm, which set in early Saturday morning, followed by moderate weather, has virtually suspended logging operations in the Chippewa Valley, and the camps, with few exceptions, have broken up, after having accomplished a good season's work. The rains have caused a rise of nearly two feet in the Chippewa and Eau, which is perceptible at this point, and there is a prospect of the ice moving out of the Dells reservoir and other dams above before the close of the week, leaving the river free for a resumption of raft and boat navigation. The improvement at the mills are about completed, and there is a possibility that several of the establishments having a surplus of logs from last season will commence operations this week. A large number of men were sent up both rivers this morning, so as to be in readiness for the drive, which is anticipated to take place earlier than usual. ON THE WOLF AND WAUPACA RIVERS, Waupaca, Wisconsin, March 30 The lumbermen, with their teams, are rushing out of the woods and spending a few days in the cities preparatory to going on to the river. The rivers are all open now, but the dams are frozen to such an extent that logs cannot be run through. On the Wolf, Little Wolf and Waupaca rivers are large crops of logs, and the present season will be a good one for rivermen. The Wisconsin Central Railway is running extra log trains daily, and there is said to be logs enough on their line north of Stevens Point to furnish business for the road all summer. The Weed & Gumaer Manufacturing Company of Weyauwega buys logs from one hundred miles north, saws them at their mills at that place, and re-ships the dressed lumber back to Stevens Point, forty miles north of Weyauwega. There are several new sawmills being erected at the small towns on the railroad, and a lively business will be carried on this summer.","{
+  ""region"": ""Chippewa Valley, Wisconsin"",
+  ""vulnerability"": {
+    ""exposure"": {
+      ""score"": 4,
+      ""evidence"": ""\""A heavy rainstorm, which set in early Saturday morning, followed by moderate weather, has virtually suspended logging operations in the Chippewa Valley... The rains have caused a rise of nearly two feet in the Chippewa and Eau...\""""
+    },
+    ""sensitivity"": {
+      ""score"": 4,
+      ""evidence"": ""\""...has virtually suspended logging operations in the Chippewa Valley, and the camps, with few exceptions, have broken up...\"" and \""The rains have caused a rise of nearly two feet in the Chippewa and Eau... there is a prospect of the ice moving out of the Dells reservoir and other dams above before the close of the week, leaving the river free for a resumption of raft and boat navigation.\""""
+    },
+    ""adaptability"": {
+      ""score"": 4,
+      ""evidence"": ""\""A large number of men were sent up both rivers this morning, so as to be in readiness for the drive, which is anticipated to take place earlier than usual.\"" and \""The improvement at the mills are about completed, and there is a possibility that several of the establishments having a surplus of logs from last season will commence operations this week.\""""
+    }
+  },
+  ""resilience"": {
+    ""temporal_scale"": {
+      ""primary_focus"": ""short-term absorptive capacity"",
+      ""evidence"": ""\""...has virtually suspended logging operations... camps... have broken up...\"" and \""A large number of men were sent up both rivers this morning, so as to be in readiness for the drive...\"" indicate immediate operational adjustments and readiness for resumed activity.""
+    },
+    ""functional_system"": {
+      ""primary_focus"": [""transportation"", ""water""],
+      ""evidence"": ""\""...leaving the river free for a resumption of raft and boat navigation.\"" and \""The Wisconsin Central Railway is running extra log trains daily...\"" highlight impacts and adjustments in river and rail transport; \""The rains have caused a rise of nearly two feet in the Chippewa and Eau...\"" shows water system relevance.""
+    },
+    ""spatial_scale"": {
+      ""primary_focus"": ""regional"",
+      ""evidence"": ""\""Chippewa Valley,\"" \""Eau Claire,\"" and references to multiple rivers and towns (e.g., Wolf, Waupaca, Weyauwega, Stevens Point) indicate impacts and responses across a broad regional area.""
+    }
+  },
+  ""question_answer"": {
+    ""question"": ""How has the recent heavy rainstorm affected the logging and river navigation infrastructure in the Chippewa Valley, and what are the anticipated changes in operations as a result?"",
+    ""answer"": ""The heavy rainstorm caused a temporary suspension of logging operations and broke up most logging camps in the Chippewa Valley, while also raising river levels and accelerating ice breakup. As a result, river navigation is expected to resume earlier than usual, with crews being redeployed and mills preparing to restart operations using surplus logs.""
+  }
+}"
