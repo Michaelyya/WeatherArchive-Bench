@@ -1,8 +1,9 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "4"
 os.environ["ONNX_NUM_THREADS"] = "4"
-
+os.environ["OPENAI_API_KEY"] = "sk-proj-STwgCjKCHqR-pfzLguXPVV4MgR3r9nwMjrL5nv6MZ3V17qAWYx1b3nb30_0fcuuUPzgf"
 from nltk.tokenize import sent_tokenize
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 import re
 
 import chromadb
@@ -34,9 +35,30 @@ def tokenize(text):
 def detokenize(tokens):
     return tokenizer.decode(tokens)
 
-# sliding window chunking
-def chunk_text(text, max_tokens=256, overlap=0):
+
+def safe_sent_tokenize(text):
+    protected = {
+        "No.": "No<dot>",
+        "Mr.": "Mr<dot>",
+        "Ms.": "Ms<dot>",
+        "Dr.": "Dr<dot>",
+        "Mine.": "Mr<dot>",
+        "Ste.": "Ste<dot>",
+    }
+    for k, v in protected.items():
+        text = text.replace(k, v)
+
+    text = re.sub(r'\$(\d+)\.(\d+)', r'$\1<dot>\2', text)
+    text = re.sub(r'(?<=\d)\.(?=\d)', '<dot>', text) 
+
     sentences = sent_tokenize(text, language="english")
+
+    return [s.replace("<dot>", ".") for s in sentences]
+
+
+# sliding window chunking
+def chunk_text(text, max_tokens=256, overlap=100):
+    sentences = safe_sent_tokenize(text)
     chunks = []
     current_chunk = []
     current_len = 0
@@ -67,8 +89,14 @@ def chunk_text(text, max_tokens=256, overlap=0):
                         new_chunk.insert(0, sent)
                         overlap_tokens += sent_tokens
 
-                    current_chunk = new_chunk
-                    current_len = sum(len(tokenize(s)) for s in current_chunk)
+                    if new_chunk == current_chunk:
+                        i += 1
+                        current_chunk = []
+                        current_len = 0
+                    else:
+                        current_chunk = new_chunk
+                        current_len = sum(len(tokenize(s)) for s in current_chunk)
+
                 else:
                     current_chunk = []
                     current_len = 0
@@ -86,7 +114,7 @@ def chunk_text(text, max_tokens=256, overlap=0):
 
     # Add remaining chunk
     if current_chunk:
-
+        print(current_chunk)
         chunks.append(" ".join(current_chunk))
 
     return chunks
@@ -118,7 +146,6 @@ for i, row in df.iterrows():
 
     # Store each chunk into Chroma
     for j, chunk in enumerate(chunks):
-        print(chunk)
         current_id += 1
         collection.add(
             documents=[chunk],
