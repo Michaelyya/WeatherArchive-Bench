@@ -11,13 +11,13 @@ client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY")
 )
 
-
 def generate_answer(query, context):
     prompt = f"""You are a climate vulnerability and resilience expert. Create a comprehensive assessment following IPCC vulnerability framework and multi-scale resilience analysis.
 
         VULNERABILITY FRAMEWORK:
         - **Exposure**: Assess the degree of climate stress (long-term climate changes, variability, and extreme event magnitude/frequency)
-        - **Sensitivity**: Evaluate how the system responds to climate change (precondition for vulnerability - higher sensitivity = greater potential impacts)  
+        - **Sensitivity**: Evaluate how the system responds to climate change (precondition for vulnerability - higher sensitivity = greater potential impacts)   
+#humans.& properties
         - **Adaptability**: Determine capacity to adjust to climate stimuli based on wealth, technology, education, information, skills, infrastructure, resources, and governance
         NOTE: If no evidence is found, output a score of "NA" and "No evidence found." in evidence.
 
