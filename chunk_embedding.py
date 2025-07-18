@@ -1,7 +1,8 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 os.environ["OMP_NUM_THREADS"] = "4"
 os.environ["ONNX_NUM_THREADS"] = "4"
-os.environ["OPENAI_API_KEY"] = "sk-proj-STwgCjKCHqR-pfzLguXPVV4MgR3r9nwMjrL5nv6MZ3V17qAWYx1b3nb30_0fcuuUPzgf"
 from nltk.tokenize import sent_tokenize
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 import re
