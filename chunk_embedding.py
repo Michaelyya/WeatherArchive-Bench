@@ -1,4 +1,6 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 os.environ["OMP_NUM_THREADS"] = "4"
 os.environ["ONNX_NUM_THREADS"] = "4"
 from nltk.tokenize import sent_tokenize
