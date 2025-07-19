@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 os.environ["OMP_NUM_THREADS"] = "4"
 os.environ["ONNX_NUM_THREADS"] = "4"
@@ -11,16 +12,17 @@ import chromadb
 import pandas as pd
 from chromadb.utils import embedding_functions
 import nltk
+
 nltk.download("punkt")
+nltk.download("punkt_tab")
 
 from nltk.tokenize import sent_tokenize
 import tiktoken
 
-#from datasets import load_dataset
+# from datasets import load_dataset
 
 # Localize Chroma
 client = chromadb.PersistentClient(path="weather_chroma_store")
-
 
 
 collection = client.get_or_create_collection(
@@ -30,8 +32,10 @@ collection = client.get_or_create_collection(
 # Initialize tokenizer (ChatGPT tokenizer)
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
+
 def tokenize(text):
     return tokenizer.encode(text)
+
 
 def detokenize(tokens):
     return tokenizer.decode(tokens)
@@ -49,8 +53,8 @@ def safe_sent_tokenize(text):
     for k, v in protected.items():
         text = text.replace(k, v)
 
-    text = re.sub(r'\$(\d+)\.(\d+)', r'$\1<dot>\2', text)
-    text = re.sub(r'(?<=\d)\.(?=\d)', '<dot>', text) 
+    text = re.sub(r"\$(\d+)\.(\d+)", r"$\1<dot>\2", text)
+    text = re.sub(r"(?<=\d)\.(?=\d)", "<dot>", text)
 
     sentences = sent_tokenize(text, language="english")
 
@@ -63,7 +67,6 @@ def chunk_text(text, max_tokens=256, overlap=100):
     chunks = []
     current_chunk = []
     current_len = 0
-
 
     i = 0
     while i < len(sentences):
@@ -121,18 +124,17 @@ def chunk_text(text, max_tokens=256, overlap=100):
     return chunks
 
 
-
 # Default embedding model
 embedding_fn = OpenAIEmbeddingFunction(
-    api_key=os.environ["OPENAI_API_KEY"],
-    model_name="text-embedding-3-small"
+    api_key=os.environ["OPENAI_API_KEY"], model_name="text-embedding-3-small"
 )
 
 
-
 # Process each article in 1386 datasets
-df = pd.read_csv(r"C:/Users/14821/Desktop/RAG/MixedCTX_Dataset(1386).csv") #C:/Users/14821/Desktop/RAG/MixedCTX_Dataset(1386).csv
-#r"/data/rech/mofengra/climateRAG/MixedCTX_Dataset(1386).csv"
+df = pd.read_csv(
+    r"./Ground-truth/MixedCTX_Dataset(1386).csv"
+)  # C:/Users/14821/Desktop/RAG/MixedCTX_Dataset(1386).csv
+# r"/data/rech/mofengra/climateRAG/MixedCTX_Dataset(1386).csv"
 
 
 current_id = collection.count()
@@ -143,23 +145,19 @@ for i, row in df.iterrows():
     chunks = chunk_text(article)
     metadata = {"date": str(row["Date"])}
 
-
-
     # Store each chunk into Chroma
     for j, chunk in enumerate(chunks):
         current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
+        collection.add(documents=[chunk], ids=[str(current_id)], metadatas=[metadata])
     print(f"{i + 1}")
 
 
+print(
+    "Successfully write 1386 datasets into chroma. Total data size is:",
+    collection.count(),
+)
 
-print("Successfully write 1386 datasets into chroma. Total data size is:", collection.count())
-
-'''
+"""
 # Process each article in CORPUS datasets
 dataset = load_dataset("NLP-RISE/guardian_climate_news_corpus")
 df = dataset["train"].to_pandas()
@@ -292,4 +290,4 @@ for i, row in subset.iterrows():
         )
 
 print("Successfully write Science Abstarct datasets into chroma. Total data size is:", collection.count())
-'''
+"""
