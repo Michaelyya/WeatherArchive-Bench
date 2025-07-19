@@ -124,7 +124,7 @@ def hybrid_retrieve(
 
         # Calculate disaster similarity and eliminate the chunks that not related to prompt
         doc_emb = np.array(all_doc_embeddings[i])
-        disaster_sim = max_disaster_similarity(doc_emb, disaster_embeddings)
+        disaster_sim = max_disaster_similarity(doc_emb)
 
         if disaster_sim >= disaster_threshold:
             hybrid_scores.append(
