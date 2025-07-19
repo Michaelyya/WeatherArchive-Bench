@@ -1,7 +1,7 @@
 import os
 import dotenv
 from openai import OpenAI
-from WXImpactRAG.hybrid_retriver import hybrid_retrieve, bm25_model, collection
+from hybrid_retriver import hybrid_retrieve, bm25, collection
 from constant.constants import OPENAI_BASEMODEL
 
 # Load environment variables
@@ -14,7 +14,7 @@ client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 def generate_answer_from_retrieve(query, top_k=5, model=OPENAI_BASEMODEL):
 
     # Retrieve top_k document chunks
-    top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=top_k)
+    top_docs = hybrid_retrieve(query, bm25, collection, top_k=top_k)
 
     # Combine retrieved document chunks into context
     context = "\n\n".join([doc for _, _, doc, _, _ in top_docs])

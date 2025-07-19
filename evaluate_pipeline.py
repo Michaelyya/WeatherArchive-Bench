@@ -12,7 +12,7 @@ from constant.constants import (
     FILE_CANDIDATE_POOL_ADDRESS,
     FILE_DESTINATION_ADDRESS,
 )
-from constant.climate_framework import climate_assessment_prompt
+from constant.climate_framework import climate_assessment_prompt, system_prompt
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -107,7 +107,7 @@ def generate_openai_answer(prompt, model, client):
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a climate expert who creates structured vulnerability and resilience assessments following IPCC frameworks. Generate evidence-based JSON responses using provided document chunks.",
+                    "content": system_prompt,
                 },
                 {"role": "user", "content": prompt},
             ],

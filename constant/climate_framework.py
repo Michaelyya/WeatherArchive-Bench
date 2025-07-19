@@ -151,3 +151,5 @@ validate_ground_truth = """
     Important: Return ONLY the JSON, no additional text or explanations.
     NOTE: Please be harsh and critical in your evaluation as a human judger!
     """
+
+system_prompt = "You are a climate expert who creates structured vulnerability and resilience assessments following IPCC frameworks."

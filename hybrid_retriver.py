@@ -1,5 +1,6 @@
 import chromadb
-from chromadb.utils import embedding_functions
+import os
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 from rank_bm25 import BM25Okapi
 import nltk
 from nltk.tokenize import word_tokenize
@@ -8,7 +9,12 @@ from constant.constants import (
     CHROMADB_CLIENT_ADDRESS,
     CHROMADB_COLLECTION_NAME,
     LANGUAGE_ENGLISH,
+    OPENAI_EMBEDDING_MODEL,
 )
+import dotenv
+from sklearn.metrics.pairwise import cosine_similarity
+
+dotenv.load_dotenv()
 
 nltk.download("punkt")
 nltk.download("stopwords")
@@ -59,21 +65,28 @@ disaster_prompts = [
 
 # TODO, use the same embedding model, this is different from the one in embedding_loaders
 # Otherwise the similarity is not comparable
-embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="BAAI/bge-small-en-v1.5"
+embedding_func = OpenAIEmbeddingFunction(
+    api_key=os.environ["OPENAI_API_KEY"], model_name=OPENAI_EMBEDDING_MODEL
 )
 
 disaster_embeddings = embedding_func(disaster_prompts)
 
 
 # calculate disaster similarity's vector cosine
-def cosine_similarity(a, b):
-    a, b = np.array(a), np.array(b)
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10)
+# def cosine_similarity(a, b):
+#     a, b = np.array(a), np.array(b)
+#     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10)
+
+
+# def max_disaster_similarity(doc_emb):
+#     return max(cosine_similarity(doc_emb, d_emb) for d_emb in disaster_embeddings)
 
 
 def max_disaster_similarity(doc_emb):
-    return max(cosine_similarity(doc_emb, d_emb) for d_emb in disaster_embeddings)
+    doc_emb = np.array(doc_emb).reshape(1, -1)
+    disaster_matrix = np.array(disaster_embeddings)
+    similarities = cosine_similarity(doc_emb, disaster_matrix)
+    return np.max(similarities)
 
 
 def preprocess(text):  # remove 1.stopwords 2.non algebra and number 3.Capital letters
@@ -144,13 +157,12 @@ documents, metadatas, ids = results["documents"], results["metadatas"], results[
 bm25 = BM25Okapi([preprocess(doc) for doc in documents])
 
 # --- Usage Example
-# query = "What human impact as a result of the storm violence?"
-# top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=10)
-
-# #evaluate_accuracy("C:/Users/14821/Desktop/RAG/QACandidate_Pool.csv")
-
-
-# for i, (score, doc_id, doc, meta, dissim) in enumerate(top_docs):
-#     print(f"\nRank {i+1} | Score: {score:.4f} | DisasterSim: {dissim:.4f} | ID: {doc_id} | Date: {meta['date']} ")
-#     print(f"Chunk Text:\n{doc}")
-#     print("=" * 80)
+query = "What infrastructure and political challenges are being addressed in Montreal and New Edinburgh as a result of the ice conditions and how are they being managed according to the passage?"
+top_docs = hybrid_retrieve(query, bm25, collection, top_k=10, bm25_weight=0)
+# evaluate_accuracy("C:/Users/14821/Desktop/RAG/QACandidate_Pool.csv")
+for i, (score, doc_id, doc, meta, dissim) in enumerate(top_docs):
+    print(
+        f"\nRank {i+1} | Score: {score:.4f} | DisasterSim: {dissim:.4f} | ID: {doc_id} | Date: {meta['date']} "
+    )
+    print(f"Chunk Text:\n{doc}")
+    print("=" * 80)
