@@ -108,11 +108,13 @@ def hybrid_retrieve(
 ):
     # BM25 retrieval
     tokenized_query = preprocess(query)
+    embedding_query = embedding_func(query)
     bm25_scores = bm25_model.get_scores(tokenized_query)
 
     # Semantic retrieval
     semantic_results = chroma_collection.query(
-        query_texts=[query], n_results=200  # full similarity for alignment
+        query_embeddings=embedding_query,
+        n_results=200,  # full similarity for alignment
     )
     semantic_docs = semantic_results["documents"][0]
     semantic_scores = semantic_results["distances"][0]  # cosine distances
