@@ -1,18 +1,22 @@
 import chromadb
-import pandas as pd
 from chromadb.utils import embedding_functions
 from rank_bm25 import BM25Okapi
 import nltk
+from nltk.tokenize import word_tokenize
+import numpy as np
+from constant.constants import (
+    CHROMADB_CLIENT_ADDRESS,
+    CHROMADB_COLLECTION_NAME,
+    LANGUAGE_ENGLISH,
+)
+
 nltk.download("punkt")
 nltk.download("stopwords")
-from nltk.tokenize import word_tokenize
-import tiktoken
-import numpy as np
-
+stopwords = set(nltk.corpus.stopwords.words(LANGUAGE_ENGLISH))
 
 # Load Chroma client
-client = chromadb.PersistentClient(path="weather_chroma_store")
-collection = client.get_collection(name="weather_records")
+client = chromadb.PersistentClient(path=CHROMADB_CLIENT_ADDRESS)
+collection = client.get_collection(name=CHROMADB_COLLECTION_NAME)
 
 disaster_prompts = [
     # Natural disaster
@@ -26,7 +30,6 @@ disaster_prompts = [
     "landslide",
     "wildfire",
     "volcanic eruption",
-
     # Climate
     "extreme weather",
     "heavy rain",
@@ -36,7 +39,6 @@ disaster_prompts = [
     "heat wave",
     "cold wave",
     "weather damage",
-
     # Geographic related
     "mountain area",
     "coastal region",
@@ -44,7 +46,6 @@ disaster_prompts = [
     "urban flooding",
     "rural area",
     "forest region",
-
     # Sup
     "emergency response",
     "evacuation",
@@ -53,53 +54,52 @@ disaster_prompts = [
     "disaster relief",
     "support troops",
     "civil protection",
-    "humanitarian assistance"
+    "humanitarian assistance",
 ]
 
-
+# TODO, use the same embedding model, this is different from the one in embedding_loaders
+# Otherwise the similarity is not comparable
 embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name="BAAI/bge-small-en-v1.5"
 )
 
 disaster_embeddings = embedding_func(disaster_prompts)
 
-#calculate disaster similarity's vector cosine
-def max_disaster_similarity(doc_embedding, disaster_embeddings):
 
-    sims = []
-    for d_emb in disaster_embeddings:
-        # cosine similarity
-        dot = np.dot(doc_embedding, d_emb)
-        norm1 = np.linalg.norm(doc_embedding)
-        norm2 = np.linalg.norm(d_emb)
-        sims.append(dot / (norm1 * norm2 + 1e-10))
-    return max(sims)
+# calculate disaster similarity's vector cosine
+def cosine_similarity(a, b):
+    a, b = np.array(a), np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10)
 
 
-# Tokenizer and preprocess for BM25
-stopwords = set(nltk.corpus.stopwords.words("english"))
-def preprocess(text):# remove 1.stopwords 2.non algebra and number 3.Capital letters
-    return [word for word in word_tokenize(text.lower()) if word.isalnum() and word not in stopwords]
+def max_disaster_similarity(doc_emb):
+    return max(cosine_similarity(doc_emb, d_emb) for d_emb in disaster_embeddings)
 
-# Load documents from Chroma and build BM25 index
-results = collection.get()
-documents = results["documents"]
-metadatas = results["metadatas"]
-ids = results["ids"]
 
-bm25_corpus = [preprocess(doc) for doc in documents]
-bm25_model = BM25Okapi(bm25_corpus)
+def preprocess(text):  # remove 1.stopwords 2.non algebra and number 3.Capital letters
+    return [
+        word
+        for word in word_tokenize(text.lower())
+        if word.isalnum() and word not in stopwords
+    ]
 
-#Hybrid retrieve function
-def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=10, bm25_weight=0.3, disaster_threshold = 0.0):
+
+# Hybrid retrieve function
+def hybrid_retrieve(
+    query,
+    bm25_model,
+    chroma_collection,
+    top_k=10,
+    bm25_weight=0.3,
+    disaster_threshold=0.0,
+):
     # BM25 retrieval
     tokenized_query = preprocess(query)
     bm25_scores = bm25_model.get_scores(tokenized_query)
 
     # Semantic retrieval
     semantic_results = chroma_collection.query(
-        query_texts=[query],
-        n_results=200  # full similarity for alignment
+        query_texts=[query], n_results=200  # full similarity for alignment
     )
     semantic_docs = semantic_results["documents"][0]
     semantic_scores = semantic_results["distances"][0]  # cosine distances
@@ -111,10 +111,9 @@ def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=10, bm25_weight=
     semantic_id_score_map = dict(zip(semantic_results["ids"][0], semantic_scores))
 
     # Get every chunk's vector
-    all_doc_embeddings = chroma_collection.get(
-        ids=ids,
-        include=["embeddings"]
-    )["embeddings"]
+    all_doc_embeddings = chroma_collection.get(ids=ids, include=["embeddings"])[
+        "embeddings"
+    ]
 
     # Merge: weighted sum of BM25 and semantic
     hybrid_scores = []
@@ -128,7 +127,9 @@ def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=10, bm25_weight=
         disaster_sim = max_disaster_similarity(doc_emb, disaster_embeddings)
 
         if disaster_sim >= disaster_threshold:
-            hybrid_scores.append((final_score, doc_id, documents[i], metadatas[i], disaster_sim))
+            hybrid_scores.append(
+                (final_score, doc_id, documents[i], metadatas[i], disaster_sim)
+            )
         else:
             pass
 
@@ -137,6 +138,12 @@ def hybrid_retrieve(query, bm25_model, chroma_collection, top_k=10, bm25_weight=
     return hybrid_scores[:top_k]
 
 
+# Load documents from Chroma and build BM25 index
+results = collection.get()
+documents, metadatas, ids = results["documents"], results["metadatas"], results["ids"]
+bm25 = BM25Okapi([preprocess(doc) for doc in documents])
+
+# --- Usage Example
 # query = "What human impact as a result of the storm violence?"
 # top_docs = hybrid_retrieve(query, bm25_model, collection, top_k=10)
 

@@ -3,7 +3,7 @@ import dotenv
 from openai import OpenAI
 import pandas as pd
 from tqdm import tqdm
-from Retrieve import hybrid_retrieve, bm25_model, collection
+from WXImpactRAG.hybrid_retriver import hybrid_retrieve, bm25_model, collection
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import re
@@ -18,26 +18,24 @@ HF_MODELS = {
     "3": "mistralai/Mixtral-8x7B-Instruct-v0.1",
     "4": "Qwen/Qwen2.5-14B-Instruct",
     "5": "google/gemma-2-9b-it",
-    "6": "mistralai/Mistral-Small-24B-Instruct-2501"
+    "6": "mistralai/Mistral-Small-24B-Instruct-2501",
 }
 
 # config.ymal
 
-OPENAI_MODELS = {
-    "7": "gpt-3.5-turbo",
-    "8": "gpt-4"
-}
+OPENAI_MODELS = {"7": "gpt-3.5-turbo", "8": "gpt-4"}
+
 
 def select_model():
     print("Please select a model to use:")
     print("Hugging Face models:")
     for key, value in HF_MODELS.items():
         print(f"{key}: {value}")
-    
+
     print("\nOpenAI models:")
     for key, value in OPENAI_MODELS.items():
         print(f"{key}: {value}")
-    
+
     while True:
         choice = input("\nEnter model number: ")
         if choice in HF_MODELS:
@@ -47,24 +45,24 @@ def select_model():
         else:
             print("Invalid selection, please try again")
 
+
 def initialize_hf_model(model_name):
     """Initialize Hugging Face model"""
     print(f"Loading Hugging Face model: {model_name}")
-    
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     config = BitsAndBytesConfig(
         load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16, 
+        bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
-        llm_int8_enable_fp32_cpu_offload=True 
+        llm_int8_enable_fp32_cpu_offload=True,
     )
     model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        device_map={"": 0}, 
-        quantization_config=config  
+        model_name, device_map={"": 0}, quantization_config=config
     )
     model.gradient_checkpointing_enable()
     return model, tokenizer
+
 
 def generate_hf_answer(prompt, model, tokenizer):
     """Generate answer using Hugging Face model"""
@@ -72,7 +70,8 @@ def generate_hf_answer(prompt, model, tokenizer):
     with torch.no_grad():
         outputs = model.generate(**inputs, max_new_tokens=2000)
     result = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return result[len(prompt):].strip()
+    return result[len(prompt) :].strip()
+
 
 def generate_openai_answer(prompt, model, client):
     """Generate answer using OpenAI model"""
@@ -80,21 +79,33 @@ def generate_openai_answer(prompt, model, client):
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "You are a climate expert who creates structured vulnerability and resilience assessments following IPCC frameworks. Generate evidence-based JSON responses using provided document chunks."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are a climate expert who creates structured vulnerability and resilience assessments following IPCC frameworks. Generate evidence-based JSON responses using provided document chunks.",
+                },
+                {"role": "user", "content": prompt},
             ],
             temperature=0.2,
-            max_tokens=2000
+            max_tokens=2000,
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"[ERROR] Failed to generate answer: {e}")
         return f"Error: {str(e)}"
 
-def generate_answer_from_retrieve(query, model_name, model_type, hf_model=None, hf_tokenizer=None, openai_client=None, top_k=5):
+
+def generate_answer_from_retrieve(
+    query,
+    model_name,
+    model_type,
+    hf_model=None,
+    hf_tokenizer=None,
+    openai_client=None,
+    top_k=5,
+):
     """
     Generate IPCC-style structured vulnerability/resilience answer from retrieved document chunks
-    
+
     Parameters:
         query: Input question
         model_name: Model name
@@ -103,7 +114,7 @@ def generate_answer_from_retrieve(query, model_name, model_type, hf_model=None, 
         hf_tokenizer: Hugging Face tokenizer
         openai_client: OpenAI client
         top_k: Number of top passages to retrieve
-        
+
     Returns:
         str: JSON-formatted structured answer
     """
@@ -179,7 +190,17 @@ Only output the JSON response. Do not include any additional text and space in t
     else:
         return generate_openai_answer(prompt, model_name, openai_client)
 
-def process_csv(input_file_path, output_file_path, model_name, model_type, hf_model=None, hf_tokenizer=None, openai_client=None, max_rows=None):
+
+def process_csv(
+    input_file_path,
+    output_file_path,
+    model_name,
+    model_type,
+    hf_model=None,
+    hf_tokenizer=None,
+    openai_client=None,
+    max_rows=None,
+):
     df = pd.read_csv(input_file_path)
 
     if max_rows is not None:
@@ -190,51 +211,51 @@ def process_csv(input_file_path, output_file_path, model_name, model_type, hf_mo
     generated_jsons = []
 
     for index, row in tqdm(df.iterrows(), total=len(df), desc="Generating evaluations"):
-        query = row['query']
+        query = row["query"]
         json_result = generate_answer_from_retrieve(
-            query, 
-            model_name, 
-            model_type,
-            hf_model,
-            hf_tokenizer,
-            openai_client
+            query, model_name, model_type, hf_model, hf_tokenizer, openai_client
         )
         queries.append(query)
         generated_jsons.append(json_result)
 
-    results_df = pd.DataFrame({
-        'query': queries,
-        'generated_structured_answer': generated_jsons,
-        'model_used': model_name
-    })
+    results_df = pd.DataFrame(
+        {
+            "query": queries,
+            "generated_structured_answer": generated_jsons,
+            "model_used": model_name,
+        }
+    )
 
     results_df.to_csv(output_file_path, index=False)
     print(f"\nDone. Results saved to: {output_file_path}")
 
+
 if __name__ == "__main__":
     # Let user select model
     model_name, model_type = select_model()
-    
+
     # Initialize model
     hf_model, hf_tokenizer, openai_client = None, None, None
-    
+
     if model_type == "hf":
         hf_model, hf_tokenizer = initialize_hf_model(model_name)
     else:
         openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    
+
     # Set file paths
-    input_csv_path = "C:/Users/14821/PyCharmMiscProject/Ground-truth/QACandidate_Pool.csv"
+    input_csv_path = (
+        "C:/Users/14821/PyCharmMiscProject/Ground-truth/QACandidate_Pool.csv"
+    )
     output_csv_path = "C:/Users/14821/PyCharmMiscProject/Ground-truth/generated_structured_answers.csv"
-    
+
     # Process CSV file
     process_csv(
-        input_csv_path, 
-        output_csv_path, 
-        model_name, 
+        input_csv_path,
+        output_csv_path,
+        model_name,
         model_type,
         hf_model,
         hf_tokenizer,
         openai_client,
-        max_rows=100  # Only process first 100 rows
+        max_rows=100,  # Only process first 100 rows
     )

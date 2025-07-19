@@ -18,19 +18,25 @@ nltk.download("punkt_tab")
 
 from nltk.tokenize import sent_tokenize
 import tiktoken
+from constant.constants import (
+    FILE_1386_ADDRESS,
+    OPENAI_EMBEDDING_MODEL,
+    OPENAI_TOKENIZER,
+    CHROMADB_CLIENT_ADDRESS,
+    CHROMADB_COLLECTION_NAME,
+    LANGUAGE_ENGLISH,
+)
 
 # from datasets import load_dataset
 
 # Localize Chroma
-client = chromadb.PersistentClient(path="weather_chroma_store")
-
-
+client = chromadb.PersistentClient(path=CHROMADB_CLIENT_ADDRESS)
 collection = client.get_or_create_collection(
-    name="weather_records",
+    name=CHROMADB_COLLECTION_NAME,
 )
 
 # Initialize tokenizer (ChatGPT tokenizer)
-tokenizer = tiktoken.get_encoding("cl100k_base")
+tokenizer = tiktoken.get_encoding(OPENAI_TOKENIZER)
 
 
 def tokenize(text):
@@ -56,8 +62,7 @@ def safe_sent_tokenize(text):
     text = re.sub(r"\$(\d+)\.(\d+)", r"$\1<dot>\2", text)
     text = re.sub(r"(?<=\d)\.(?=\d)", "<dot>", text)
 
-    sentences = sent_tokenize(text, language="english")
-
+    sentences = sent_tokenize(text, language=LANGUAGE_ENGLISH)
     return [s.replace("<dot>", ".") for s in sentences]
 
 
@@ -70,7 +75,6 @@ def chunk_text(text, max_tokens=256, overlap=100):
 
     i = 0
     while i < len(sentences):
-
         sentence = sentences[i]
         token_len = len(tokenize(sentence))
 
@@ -106,7 +110,6 @@ def chunk_text(text, max_tokens=256, overlap=100):
                     current_len = 0
             else:
                 # Very long single sentence (skip or force chunk)
-
                 chunks.append(sentence)
                 i += 1
                 continue
@@ -118,7 +121,7 @@ def chunk_text(text, max_tokens=256, overlap=100):
 
     # Add remaining chunk
     if current_chunk:
-        print(current_chunk)
+        # print(current_chunk)
         chunks.append(" ".join(current_chunk))
 
     return chunks
@@ -126,19 +129,12 @@ def chunk_text(text, max_tokens=256, overlap=100):
 
 # Default embedding model
 embedding_fn = OpenAIEmbeddingFunction(
-    api_key=os.environ["OPENAI_API_KEY"], model_name="text-embedding-3-small"
+    api_key=os.environ["OPENAI_API_KEY"], model_name=OPENAI_EMBEDDING_MODEL
 )
 
-
 # Process each article in 1386 datasets
-df = pd.read_csv(
-    r"./Ground-truth/MixedCTX_Dataset(1386).csv"
-)  # C:/Users/14821/Desktop/RAG/MixedCTX_Dataset(1386).csv
-# r"/data/rech/mofengra/climateRAG/MixedCTX_Dataset(1386).csv"
-
-
+df = pd.read_csv(FILE_1386_ADDRESS)
 current_id = collection.count()
-
 
 for i, row in df.iterrows():
     article = str(row["Article"])
@@ -150,7 +146,6 @@ for i, row in df.iterrows():
         current_id += 1
         collection.add(documents=[chunk], ids=[str(current_id)], metadatas=[metadata])
     print(f"{i + 1}")
-
 
 print(
     "Successfully write 1386 datasets into chroma. Total data size is:",

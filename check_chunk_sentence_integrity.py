@@ -1,19 +1,22 @@
 import chromadb
 from nltk.tokenize import sent_tokenize
-client = chromadb.PersistentClient(path="weather_chroma_store")
+from constant.constants import (
+    CHROMADB_CLIENT_ADDRESS,
+    CHROMADB_COLLECTION_NAME,
+    LANGUAGE_ENGLISH,
+)
 
-collection = client.get_collection(name="weather_records")
-
-
+client = chromadb.PersistentClient(path=CHROMADB_CLIENT_ADDRESS)
+collection = client.get_collection(name=CHROMADB_COLLECTION_NAME)
 results = collection.get()
 
 docs = results["documents"]
 ids = results["ids"]
 metadatas = results["metadatas"]
 
-# print every chunks and check 句子完整性
+# print every chunks and check Sentence integrity
 for chunk, cid, meta in zip(docs, ids, metadatas):
-    sentences = sent_tokenize(chunk, language="english")
+    sentences = sent_tokenize(chunk, language=LANGUAGE_ENGLISH)
 
     print(f"\n Chunk ID: {cid}")
     print(f" Metadata: {meta}")
@@ -31,5 +34,5 @@ for chunk, cid, meta in zip(docs, ids, metadatas):
         print("End of chunk is the end of the sentence ✔")
 
     # Print whole chunks
-    print("Whole Chunks：\n" + chunk)
+    print("Whole Chunks: \n" + chunk)
     print("=" * 80)

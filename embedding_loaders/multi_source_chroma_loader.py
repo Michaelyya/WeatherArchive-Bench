@@ -1,40 +1,54 @@
 import chromadb
 import pandas as pd
 from chromadb.utils import embedding_functions
-from rank_bm25 import BM25Okapi
 import nltk
-nltk.download("punkt")
-nltk.download("stopwords")
 from nltk.tokenize import word_tokenize, sent_tokenize
 import tiktoken
-import numpy as np
-import openai
 import ast
 from datasets import load_dataset
+from constant.constants import (
+    CHROMADB_CLIENT_ADDRESS,
+    CHROMADB_COLLECTION_NAME,
+    OPENAI_TOKENIZER,
+    LANGUAGE_ENGLISH,
+)
+
+nltk.download("punkt")
+nltk.download("stopwords")
 
 # Load Chroma client
-client = chromadb.PersistentClient(path="weather_chroma_store")
-collection = client.get_or_create_collection(name="weather_records")
+client = chromadb.PersistentClient(path=CHROMADB_CLIENT_ADDRESS)
+collection = client.get_or_create_collection(name=CHROMADB_COLLECTION_NAME)
 
 # Initialize embedding function
 embedding_fn = embedding_functions.DefaultEmbeddingFunction()
 
 # Tokenizer for BM25
-stopwords = set(nltk.corpus.stopwords.words("english"))
+stopwords = set(nltk.corpus.stopwords.words(""))
+
+
 def preprocess(text):
-    return [word for word in word_tokenize(text.lower()) if word.isalnum() and word not in stopwords]
+    return [
+        word
+        for word in word_tokenize(text.lower())
+        if word.isalnum() and word not in stopwords
+    ]
+
 
 # Tokenizer for embedding/chunking
-tokenizer = tiktoken.get_encoding("cl100k_base")
+tokenizer = tiktoken.get_encoding(OPENAI_TOKENIZER)
+
 
 def tokenize(text):
     return tokenizer.encode(text)
 
+
 def detokenize(tokens):
     return tokenizer.decode(tokens)
 
+
 def chunk_text(text, max_tokens=125, overlap=20):
-    sentences = sent_tokenize(text, language="english")
+    sentences = sent_tokenize(text, language=LANGUAGE_ENGLISH)
     chunks = []
     current_chunk = []
     current_len = 0
@@ -77,6 +91,7 @@ def chunk_text(text, max_tokens=125, overlap=20):
 
     return chunks
 
+
 # === Load NER-formatted dataset ===
 def parse_ner_file(path):
     docs = []
@@ -88,7 +103,9 @@ def parse_ner_file(path):
             line = line.strip()
             if line.startswith("-DOCSTART-"):
                 if current_tokens:
-                    docs.append({"doc_id": current_doc_id, "text": " ".join(current_tokens)})
+                    docs.append(
+                        {"doc_id": current_doc_id, "text": " ".join(current_tokens)}
+                    )
                     current_tokens = []
                 current_doc_id = line.split()[-1]
             elif line:
@@ -97,6 +114,7 @@ def parse_ner_file(path):
         if current_tokens:
             docs.append({"doc_id": current_doc_id, "text": " ".join(current_tokens)})
     return docs
+
 
 # Load and insert NER chunks to Chroma
 ner_docs = parse_ner_file("ner_dataset.txt")  # replace with your NER file path
@@ -107,18 +125,11 @@ for doc in ner_docs:
     text = doc["text"]
     chunks = chunk_text(text)
 
-    metadata = {
-        "source": "ner",
-        "doc_id": doc_id
-    }
+    metadata = {"source": "ner", "doc_id": doc_id}
 
     for chunk in chunks:
         current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
+        collection.add(documents=[chunk], ids=[str(current_id)], metadatas=[metadata])
 
 # === Other datasets: e.g., CSV or Hugging Face ===
 df = pd.read_csv("your_csv.csv")
@@ -129,11 +140,7 @@ for i, row in subset1.iterrows():
     metadata = {"source": "csv", "date": str(row["Date"])}
     for chunk in chunks:
         current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
+        collection.add(documents=[chunk], ids=[str(current_id)], metadatas=[metadata])
 
 # Hugging Face dataset
 hf = load_dataset("NLP-RISE/guardian_climate_news_corpus")
@@ -149,15 +156,11 @@ for i, row in df2.iterrows():
         "label": "climate",
         "title": str(row["title"]),
         "tags": tags,
-        "date": str(row["date"])
+        "date": str(row["date"]),
     }
     chunks = chunk_text(article)
     for chunk in chunks:
         current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
+        collection.add(documents=[chunk], ids=[str(current_id)], metadatas=[metadata])
 
-print("✅ 插入完成，当前 Chroma 总数:", collection.count())
+print("Insertion completed, current Chroma total number: ", collection.count())
