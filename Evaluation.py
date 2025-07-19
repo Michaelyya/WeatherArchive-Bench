@@ -21,6 +21,8 @@ HF_MODELS = {
     "6": "mistralai/Mistral-Small-24B-Instruct-2501"
 }
 
+# config.ymal
+
 OPENAI_MODELS = {
     "7": "gpt-3.5-turbo",
     "8": "gpt-4"

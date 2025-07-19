@@ -7,6 +7,7 @@ from typing import Dict, Any
 import os
 import dotenv
 from openai import OpenAI
+from prompts.climate_framework import validate_ground_truth
 
 dotenv.load_dotenv()
 client = OpenAI(
@@ -14,63 +15,7 @@ client = OpenAI(
 )
 
 def validate_and_update_answer_with_gpt4o(query: str, passage: str, generated_answer: str) -> str:
-    prompt = f"""
-    You are an expert evaluator tasked with validating and updating vulnerability and resilience assessments based on provided context.
-
-    Query: {query}
-    
-    Context/Passage: {passage}
-    
-    Current Generated Answer: {generated_answer}
-    
-    Please carefully review the current answer and:
-    1. Validate if the vulnerability scores (exposure, sensitivity, adaptability) are appropriate based on the context
-    2. Validate if the resilience assessments are accurate
-    3. Update any scores that seem inappropriate or inaccurate
-    4. Please be harsh and critical in your evaluation as a human judger
-    
-    Return the corrected answer in the EXACT same JSON format as provided, but with updated scores if needed:
-    
-    OUTPUT FORMAT (JSON):
-    {{
-        "region": "[Extract/infer geographic region]",
-        "vulnerability": {{
-            "exposure": {{
-                "score": [1-5],
-                "evidence": "Direct quotes/paraphrases supporting climate stress assessment"
-            }},
-            "sensitivity": {{
-                "score": [1-5], 
-                "evidence": "Direct quotes/paraphrases supporting system response assessment"
-            }},
-            "adaptability": {{
-                "score": [1-5],
-                "evidence": "Direct quotes/paraphrases supporting adaptive capacity assessment"
-            }}
-        }},
-        "resilience": {{
-            "temporal_scale": {{
-                "primary_focus": "[short-term absorptive capacity | medium-term adaptive capacity | long-term transformative capacity]",
-                "evidence": "Supporting evidence from chunks"
-            }},
-            "functional_system": {{
-                "primary_focus": ["[1-3 from: health, energy, food, water, transportation, information]"], 
-                "evidence": "Supporting evidence from chunks"
-            }},
-            "spatial_scale": {{
-                "primary_focus": "[local | community | regional | national]",
-                "evidence": "Supporting evidence from chunks"
-            }}
-        }},
-        "question_answer": {{
-            "question": "{query}",
-            "answer": "[2-3 sentence concise answer addressing query based on chunks]"
-        }}
-    }}
-    
-    Important: Return ONLY the JSON, no additional text or explanations.
-    NOTE: Please be harsh and critical in your evaluation as a human judger!
-    """
+    prompt = validate_ground_truth.format(query=query, passage=passage, generated_answer=generated_answer)
     
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -117,20 +62,13 @@ def process_csv(input_file: str, output_file: str):
         'generated_answer': df['generated_answer'].copy()
     })
     
-    # Add tracking columns
     output_df['score_updated'] = False
     output_df['processing_notes'] = ''
     
-    print(f"Processing {len(output_df)} rows...")
-    
     for index, row in output_df.iterrows():
-        print(f"Processing row {index + 1}/{len(output_df)}...")
-        
         query = row['query']
         passage = row['correct_passage_context']
         generated_answer = row['generated_answer']
-
-        print(f"  Row {index + 1}: Validating with GPT-4o...")
         updated_answer = validate_and_update_answer_with_gpt4o(query, passage, generated_answer)
         
         if has_scores_changed(generated_answer, updated_answer):
@@ -143,13 +81,9 @@ def process_csv(input_file: str, output_file: str):
             print(f"  Row {index + 1}: No score changes needed")
 
     final_output = output_df[['query', 'correct_passage_context', 'generated_answer']].copy()
-    
-    final_output.to_csv(output_file, index=False)
-    print(f"\nProcessing complete! Updated CSV saved to: {output_file}")
-    
+    final_output.to_csv(output_file, index=False)    
     log_file = output_file.replace('.csv', '_log.csv')
     output_df.to_csv(log_file, index=False)
-    print(f"Detailed processing log saved to: {log_file}")
     
     total_processed = len(output_df)
     total_updated = len(output_df[output_df['score_updated'] == True])
