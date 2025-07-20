@@ -19,4 +19,4 @@ HF_MODELS = {
     "5": "google/gemma-2-9b-it",
     "6": "mistralai/Mistral-Small-24B-Instruct-2501",
 }
-OPENAI_MODELS = {"7": "gpt-3.5-turbo", "8": "gpt-4"}
+OPENAI_MODELS = {"7": "gpt-3.5-turbo", "8": "gpt-4", "9": "gpt-4o"}
