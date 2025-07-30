@@ -103,7 +103,7 @@ def hybrid_retrieve(
     bm25_model,
     chroma_collection,
     top_k=10,
-    bm25_weight=0.3,
+    bm25_weight=0,
     disaster_threshold=0.0,
 ):
     # BM25 retrieval
