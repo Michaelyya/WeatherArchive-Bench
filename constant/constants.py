@@ -1,6 +1,6 @@
-FILE_1386_ADDRESS = "./Ground-truth/MixedCTX_Dataset(1386).csv"
-FILE_CANDIDATE_POOL_ADDRESS = "./Ground-truth/QACandidate_Pool.csv"
-FILE_DESTINATION_ADDRESS = "./Ground-truth/generated_structured_answers.csv"
+FILE_1386_ADDRESS = "Ground-truth/MixedCTX_Dataset(1386).csv"
+FILE_CANDIDATE_POOL_ADDRESS = "Ground-truth/QACandidate_Pool.csv"
+FILE_DESTINATION_ADDRESS = "Ground-truth/generated_structured_answers.csv"
 
 OPENAI_TOKENIZER = "cl100k_base"
 OPENAI_BASEMODEL = "gpt-3.5-turbo"
