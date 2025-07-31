@@ -168,10 +168,6 @@ def compare_csvs(ground_truth_file, model_output_file):
     print(f"ROUGE-L: {avg_rouge_l:.3f}")
     print(f"BERTScore F1: {avg_bert_f1:.3f}")
 
+    return avg_bleu, avg_rouge_1, avg_rouge_l, avg_bert_f1
 
-if __name__ == "__main__":
-    # Replace with your actual file paths
-    ground_truth_csv = "Ground-truth/ground_truth_csv.csv"
-    model_output_csv = FILE_DESTINATION_ADDRESS
 
-    compare_csvs(ground_truth_csv, model_output_csv)

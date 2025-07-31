@@ -6,9 +6,10 @@ import os
 import dotenv
 import json
 from openai import OpenAI
-from prompts.climate_framework import climate_assessment_prompt
+from constant.climate_framework import climate_assessment_prompt
 
 dotenv.load_dotenv()
+
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY")
 )
@@ -17,7 +18,7 @@ def generate_answer(query, context):
     prompt = climate_assessment_prompt.format(query=query, context=context)
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1",
         messages=[
             {"role": "system", "content": "You are a climate expert who creates structured vulnerability and resilience assessments following IPCC frameworks."},
             {"role": "user", "content": prompt}
@@ -157,6 +158,6 @@ def process_csv(input_file_path, output_file_path, max_rows=None):
 
 if __name__ == "__main__":
     input_csv_path = "Ground-truth/QACandidate_Pool.csv"  
-    output_csv_path = "Ground-truth/eval-gpt4o.csv" 
+    output_csv_path = "Ground-truth/ground_truth.csv" 
     
-    results = process_csv(input_csv_path, output_csv_path, max_rows=100)
+    results = process_csv(input_csv_path, output_csv_path, max_rows=335)

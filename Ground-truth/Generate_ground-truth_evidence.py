@@ -5,7 +5,7 @@ import time
 import os
 import dotenv
 from openai import OpenAI
-from prompts.climate_framework import climate_assessment_prompt, generate_ground_truth_with_evidence_prompt
+from constant.climate_framework import climate_assessment_prompt, generate_ground_truth_with_evidence_prompt
 
 dotenv.load_dotenv()
 client = OpenAI(
