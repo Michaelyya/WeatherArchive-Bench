@@ -5,6 +5,8 @@ import tqdm
 from run_retrievers.utils import evaluate_retriever_performance
 from run_retrievers.utils import BASE_ADDRESS
 from constant.constants import FILE_CANDIDATE_POOL_ADDRESS
+from transformers import AutoTokenizer, AutoModel
+import torch
 
 
 def dense_retrieve_local(df, model_name):
@@ -20,7 +22,6 @@ def dense_retrieve_local(df, model_name):
             for i in range(1, 101)
             if pd.notna(row.get(f"passage_{i}"))
         ]
-        print("query:", query[:50])  # Debugging line
 
         passage_embeddings = model.encode(
             passages, convert_to_numpy=True, normalize_embeddings=True
@@ -32,17 +33,79 @@ def dense_retrieve_local(df, model_name):
         index = faiss.IndexFlatIP(passage_embeddings.shape[1])
         index.add(passage_embeddings)
         scores, indices = index.search(query_embedding, 10)
-        print("scores:", scores, "indices:", indices)  # Debugging line
         results[qid] = [passages[i] for i in indices[0]]
     return results
 
 
-def retrieve_with_docT5(df):
-    return dense_retrieve_local(df, "BeIR/query-gen-msmarco-t5-base-v1")
+def doct5_retrieve_local(df):
+    model = SentenceTransformer("sentence-transformers/msmarco-distilbert-base-tas-b")
+    results = {}
+    for _, row in tqdm.tqdm(
+        df.iterrows(), total=len(df), desc="Retrieving with doct5 (tas-b surrogate)"
+    ):
+        qid = str(row["id"])
+        query = row["query"]
+        passages = [
+            row[f"passage_{i}"]
+            for i in range(1, 101)
+            if pd.notna(row.get(f"passage_{i}"))
+        ]
+
+        if not passages:
+            continue
+
+        passage_embeddings = model.encode(
+            passages, convert_to_numpy=True, normalize_embeddings=True
+        )
+        query_embedding = model.encode(
+            [query], convert_to_numpy=True, normalize_embeddings=True
+        )
+
+        index = faiss.IndexFlatIP(passage_embeddings.shape[1])
+        index.add(passage_embeddings)
+        scores, indices = index.search(query_embedding, 10)
+        results[qid] = [passages[i] for i in indices[0]]
+    return results
 
 
-def retrieve_with_retribert(df):
-    return dense_retrieve_local(df, "yjernite/retribert-base-uncased")
+def retribert_retrieve_local(df):
+    tokenizer = AutoTokenizer.from_pretrained("yjernite/retribert-base-uncased")
+    model = AutoModel.from_pretrained("yjernite/retribert-base-uncased")
+    model.eval()
+
+    results = {}
+    for _, row in tqdm.tqdm(
+        df.iterrows(), total=len(df), desc="Retrieving with Retribert"
+    ):
+        qid = str(row["id"])
+        query = row["query"]
+        passages = [
+            row[f"passage_{i}"]
+            for i in range(1, 101)
+            if pd.notna(row.get(f"passage_{i}"))
+        ]
+
+        if not passages:
+            continue
+
+        with torch.no_grad():
+            # Encode passages
+            passage_inputs = tokenizer(
+                passages, padding=True, truncation=True, return_tensors="pt"
+            )
+            passage_outputs = model(**passage_inputs)
+            passage_embeddings = passage_outputs.pooler_output.detach().numpy()
+
+            # Encode query
+            query_inputs = tokenizer(query, return_tensors="pt", truncation=True)
+            query_outputs = model(**query_inputs)
+            query_embedding = query_outputs.pooler_output.detach().numpy()
+
+        index = faiss.IndexFlatIP(passage_embeddings.shape[1])
+        index.add(passage_embeddings)
+        scores, indices = index.search(query_embedding, 10)
+        results[qid] = [passages[i] for i in indices[0]]
+    return results
 
 
 def retrieve_with_ance(df):
@@ -61,11 +124,11 @@ def run_and_eval_retrievers():
     df = pd.read_csv(FILE_CANDIDATE_POOL_ADDRESS)
 
     retrievers = [
-        ("doct5", retrieve_with_docT5, f"{BASE_ADDRESS}/doct5.csv"),
-        ("retribert", retrieve_with_retribert, f"{BASE_ADDRESS}/retribert.csv"),
-        ("ance", retrieve_with_ance, f"{BASE_ADDRESS}/ance.csv"),
-        ("colbert", retrieve_with_colbert, f"{BASE_ADDRESS}/colbert.csv"),
-        ("unicoil", retrieve_with_unicoil, f"{BASE_ADDRESS}/unicoil.csv"),
+        ("doct5", doct5_retrieve_local, f"{BASE_ADDRESS}/doct5.csv"),
+        ("retribert", retribert_retrieve_local, f"{BASE_ADDRESS}/retribert.csv"),
+        # ("ance", retrieve_with_ance, f"{BASE_ADDRESS}/ance.csv"),
+        # ("colbert", retrieve_with_colbert, f"{BASE_ADDRESS}/colbert.csv"),
+        # ("unicoil", retrieve_with_unicoil, f"{BASE_ADDRESS}/unicoil.csv"),
     ]
 
     for name, fn, path in retrievers:
