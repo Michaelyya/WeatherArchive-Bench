@@ -41,24 +41,20 @@ def retrieve_with_docT5(df):
     return dense_retrieve_local(df, "BeIR/query-gen-msmarco-t5-base-v1")
 
 
-def retrieve_with_colbert_h(df):
-    return dense_retrieve_local(df, "colbert-ir/colbertv1.9-msmarco")
-
-
-def retrieve_with_repbert(df):
-    return dense_retrieve_local(df, "yjernite/repbert-base-uncased")
+def retrieve_with_retribert(df):
+    return dense_retrieve_local(df, "yjernite/retribert-base-uncased")
 
 
 def retrieve_with_ance(df):
-    return dense_retrieve_local(df, "castorini/ance-msmarco")
+    return dense_retrieve_local(df, "castorini/ance-msmarco-passage")
 
 
 def retrieve_with_colbert(df):
-    return dense_retrieve_local(df, "colbert-ir/colbertv1.0")
+    return dense_retrieve_local(df, "colbert-ir/colbertv1.9")
 
 
 def retrieve_with_unicoil(df):
-    return dense_retrieve_local(df, "castorini/unicoil-msmarco")
+    return dense_retrieve_local(df, "castorini/unicoil-msmarco-passage")
 
 
 def run_and_eval_retrievers():
@@ -66,8 +62,7 @@ def run_and_eval_retrievers():
 
     retrievers = [
         ("doct5", retrieve_with_docT5, f"{BASE_ADDRESS}/doct5.csv"),
-        ("colbert_h", retrieve_with_colbert_h, f"{BASE_ADDRESS}/colbert_h.csv"),
-        ("repbert", retrieve_with_repbert, f"{BASE_ADDRESS}/repbert.csv"),
+        ("retribert", retrieve_with_retribert, f"{BASE_ADDRESS}/retribert.csv"),
         ("ance", retrieve_with_ance, f"{BASE_ADDRESS}/ance.csv"),
         ("colbert", retrieve_with_colbert, f"{BASE_ADDRESS}/colbert.csv"),
         ("unicoil", retrieve_with_unicoil, f"{BASE_ADDRESS}/unicoil.csv"),

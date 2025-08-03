@@ -41,10 +41,6 @@ def retrieve_with_deepct(df):
     )
 
 
-def retrieve_with_colbert_v2h(df):
-    return dense_retrieve_local(df, "colbert-ir/colbertv2.0")
-
-
 def retrieve_with_sbert(df):
     return dense_retrieve_local(
         df, "sentence-transformers/msmarco-distilbert-base-tas-b"
@@ -64,11 +60,6 @@ def run_and_eval_retrievers():
 
     retrievers = [
         ("deepct", retrieve_with_deepct, f"{BASE_ADDRESS}/deepct.csv"),
-        (
-            "colbert_v2h",
-            retrieve_with_colbert_v2h,
-            f"{BASE_ADDRESS}/colbert_v2h.csv",
-        ),
         ("sbert", retrieve_with_sbert, f"{BASE_ADDRESS}/sbert.csv"),
         (
             "colbert_v2",
