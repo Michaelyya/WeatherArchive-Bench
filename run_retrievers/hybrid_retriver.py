@@ -1,5 +1,6 @@
 import chromadb
-import os
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 from rank_bm25 import BM25Okapi
 import nltk
@@ -13,6 +14,8 @@ from constant.constants import (
 )
 import dotenv
 from sklearn.metrics.pairwise import cosine_similarity
+
+from rerank import ClimateReranker
 
 dotenv.load_dotenv()
 
@@ -105,6 +108,8 @@ def hybrid_retrieve(
     top_k=10,
     bm25_weight=0,
     disaster_threshold=0.0,
+    #Choose whether or not using rerank
+    rerank=False
 ):
     # BM25 retrieval
     tokenized_query = preprocess(query)
@@ -150,6 +155,13 @@ def hybrid_retrieve(
 
     # Sort and return top_k
     hybrid_scores.sort(reverse=True)
+
+    # Whether or not using rerank
+    if rerank:
+        reranker = ClimateReranker()
+        hybrid_scores = reranker.rerank(query, hybrid_scores, top_n=top_k)
+    else:
+        hybrid_scores = hybrid_scores[:top_k]
     return hybrid_scores[:top_k]
 
 

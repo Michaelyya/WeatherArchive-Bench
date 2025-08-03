@@ -15,7 +15,7 @@ def evaluate_retriever_performance(
         correct_idx = int(row["correct_passage_index"])
         golden_answer = row[f"passage_{correct_idx}"]
 
-        retrieved_passages = retrieval_results.get(qid, [])
+        retrieved_passages = retrieval_results.get(str(qid), [])
 
         hit_k = {}  # hit@k flags
         mrr_k = {}  # mrr@k values
