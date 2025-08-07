@@ -9,6 +9,7 @@ import time
 import argparse
 from typing import Dict, List, Tuple, Optional, Any
 from huggingface_hub import login
+import torch.cuda
 
 from constant.constants import (
     HF_MODELS,
@@ -23,23 +24,35 @@ dotenv.load_dotenv()
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY")
 )
-API_KEY = os.environ.get("HUGGINGFACE_API_KEY", "")
-if API_KEY:
-    login(token=API_KEY)
-    print("Hugging Face authentication successful")
+# API_KEY = os.environ.get("HUGGINGFACE_API_KEY", "")
+# if API_KEY:
+#     login(token=API_KEY)
+#     print("Hugging Face authentication successful")
 
-huggingface_models = [
-    "meta-llama/Meta-Llama-3-8B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct", 
-    "mistralai/Mixtral-8x7B-Instruct-v0.1",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "google/gemma-2-9b-it",
-    "mistralai/Mistral-Small-24B-Instruct-2501"
-]
+# huggingface_models = [
+#     "meta-llama/Meta-Llama-3-8B-Instruct",
+#     "Qwen/Qwen2.5-7B-Instruct",
+#     "mistralai/Mixtral-8x7B-Instruct-v0.1",
+#     "Qwen/Qwen2.5-14B-Instruct",
+#     "google/gemma-2-9b-it",
+#     "mistralai/Mistral-Small-24B-Instruct-2501"
+# ]
+
+
+def check_gpu_memory():
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+        print(f"Available: {torch.cuda.memory_allocated(0) / 1e9:.1f} GB used")
+    else:
+        print("No GPU available")
 
 
 def initialize_hf_model(model_name: str):
     print(f"Loading Hugging Face model: {model_name}")
+    
+    # Check GPU memory first
+    check_gpu_memory()
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
@@ -54,7 +67,7 @@ def initialize_hf_model(model_name: str):
     
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        device_map={"": 0}, 
+        device_map="auto",  # Let it auto-detect GPU
         quantization_config=config,
         torch_dtype=torch.float16
     )
