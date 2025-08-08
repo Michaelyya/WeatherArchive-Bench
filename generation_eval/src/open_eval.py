@@ -26,7 +26,7 @@ if API_KEY:
     login(token=API_KEY)
     print("Hugging Face authentication successful")
 
-huggingface_models=["meta-llama/Meta-Llama-3-8B-Instruct","Qwen/Qwen2.5-7B-Instruct","mistralai/Mixtral-8x7B-Instruct-v0.1","Qwen/Qwen2.5-14B-Instruct","Qwen/Qwen2.5-7B-Instruct","google/gemma-2-9b-it","mistralai/Mistral-Small-24B-Instruct-2501"]
+huggingface_models=["meta-llama/Meta-Llama-3-8B-Instruct","Qwen/Qwen2.5-7B-Instruct","mistralai/Mixtral-8x7B-Instruct-v0.1","Qwen/Qwen2.5-14B-Instruct","Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-32B-Instruct", "google/gemma-2-9b-it","mistralai/Mistral-Small-24B-Instruct-2501"]
 
 # Global model and tokenizer (will be set by load_models)
 model = None
@@ -97,6 +97,7 @@ def load_models(selected_models: List[str]):
                 
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
+                    cache_dir="X:\.cache",
                     device_map={"": 0}, 
                     quantization_config=config  
                 )
@@ -117,7 +118,7 @@ def generate_answer_with_model(query: str, context: str, model_id: str, loaded_m
     
     inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
     with torch.no_grad():
-        outputs = model.generate(**inputs,max_new_tokens=120)
+        outputs = model.generate(**inputs,max_new_tokens=500)
     result=tokenizer.decode(outputs[0], skip_special_tokens=True)
     result=result[len(prompt):].strip()
 
