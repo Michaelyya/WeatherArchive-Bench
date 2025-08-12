@@ -17,8 +17,8 @@ HF_MODELS = {
     "3": "Qwen/Qwen2.5-14B-Instruct",
     "4": "Qwen/Qwen2.5-32B-Instruct",
     "5": "Qwen/Qwen2.5-72B-Instruct",
-    "6": "mistralai/Mixtral-8x7B-Instruct-v0.1",
-    "7": "mistralai/Mistral-Small-24B-Instruct-2501",
+    "6": "mistralai/Ministral-8B-Instruct-2410",
+    "7": "mistralai/Mistral-Small-3.1-24B-Base-2503",
     "8": "google/gemma-2-9b-it",
 }
 OPENAI_MODELS = {"9": "gpt-3.5-turbo", "10": "gpt-4", "11": "gpt-4o"}
