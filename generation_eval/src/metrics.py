@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
+import re
 from sklearn.metrics import (
-    accuracy_score,
     mean_absolute_error,
     f1_score,
     precision_score,
@@ -13,156 +13,187 @@ import bert_score
 from constant.constants import FILE_DESTINATION_ADDRESS
 
 
-def compare_csvs(ground_truth_file, model_output_file):
-    # Load the CSV files
-    gt_df = pd.read_csv(ground_truth_file)
-    model_df = pd.read_csv(model_output_file)
+def calculate_accuracy(gt_values, model_values):
+    if len(gt_values) != len(model_values):
+        return 0.0
     
-    if len(gt_df) != len(model_df):
-        print(f"Warning: Different number of rows - GT: {len(gt_df)}, Model: {len(model_df)}")
-        return
-
-    print(f"Comparing {len(gt_df)} rows...")
-    print("=" * 50)
-
-    # 1. SCORE-BASED EVALUATION
-    print("1. SCORE-BASED METRICS")
-    print("-" * 25)
-
-    score_columns = ["exposure_score", "sensitivity_score", "adaptability_score"]
-
-    for col in score_columns:
-        print(f"\nAnalyzing {col}:")
-
-        gt_values = gt_df[col].astype(str)
-        model_values = model_df[col].astype(str)
-
-        gt_values = gt_values.replace(["nan", "NaN", "None", "[NA]"], "NA")
-        model_values = model_values.replace(["nan", "NaN", "None", "[NA]"], "NA")
-
-        accuracy = accuracy_score(gt_values, model_values)
-        gt_numeric = pd.to_numeric(gt_df[col], errors="coerce")
-        model_numeric = pd.to_numeric(model_df[col], errors="coerce")
-
-        numeric_mask = ~(gt_numeric.isna() | model_numeric.isna())
-        gt_numeric_valid = gt_numeric[numeric_mask]
-        model_numeric_valid = model_numeric[numeric_mask]
-
-        if len(gt_numeric_valid) > 0:
-            mae = mean_absolute_error(gt_numeric_valid, model_numeric_valid)
-            print(f"  MAE: {mae:.3f} (on {len(gt_numeric_valid)} numeric pairs)")
-        else:
-            print(f"  MAE: N/A (no numeric values to compare)")
-
-        print(f"  Accuracy (exact match): {accuracy:.3f}")
-        print(f"  Total samples: {len(gt_values)}")
-
-    # 2. MCQ EVALUATION
-    print("\n2. MCQ METRICS")
-    print("-" * 15)
-
-    mcq_columns = ["temporal_scale_focus", "functional_system_focus", "spatial_scale_focus"]
-
-    for col in mcq_columns:
-        print(f"\nAnalyzing {col}:")
-
-        gt_values = gt_df[col].astype(str)
-        model_values = model_df[col].astype(str)
-
-        gt_values = gt_values.replace(["nan", "NaN", "None", "[NA]"], "NA")
-        model_values = model_values.replace(["nan", "NaN", "None", "[NA]"], "NA")
-
-        f1 = f1_score(gt_values, model_values, average="macro", zero_division=0)
-        precision = precision_score(gt_values, model_values, average="macro", zero_division=0)
-        recall = recall_score(gt_values, model_values, average="macro", zero_division=0)
-
-        print(f"  F1 Score: {f1:.3f}")
-        print(f"  Precision: {precision:.3f}")
-        print(f"  Recall: {recall:.3f}")
-
-    # 3. QUESTION-ANSWER EVALUATION
-    print("\n3. QUESTION-ANSWER METRICS")
-    print("-" * 27)
-
-    qa_column = "answer"
-    gt_answers = gt_df[qa_column].astype(str)
-    model_answers = model_df[qa_column].astype(str)
-
-    # Calculate BLEU scores
-    bleu_scores = []
-    for gt_answer, model_answer in zip(gt_answers, model_answers):
-        if gt_answer == "nan" or model_answer == "nan":
-            bleu_scores.append(1.0 if gt_answer == model_answer else 0.0)
-        elif gt_answer.strip() == "" or model_answer.strip() == "":
-            bleu_scores.append(0.0)
-        else:
-            gt_words = gt_answer.split()
-            model_words = model_answer.split()
-            bleu = sentence_bleu([gt_words], model_words) if model_words else 0.0
-            bleu_scores.append(bleu)
-
-    avg_bleu = np.mean(bleu_scores)
+    correct = 0
+    total = len(gt_values)
+    na_num = 0
     
-    # Calculate ROUGE scores
-    rouge = Rouge()
-    rouge_1_scores = []
-    rouge_l_scores = []
+    print(len(gt_values))
+    print(len(model_values))
+    
+    
+    for gt, model in zip(gt_values, model_values):
+        if gt == model:  # This works for both integers and strings
+            correct += 1
+        elif model == "NA":
+            na_num += 1
+    print("\n correct:", correct)
+    print("\n na_total:", na_num)
+    return correct / total if total > 0 else 0.0
 
-    for gt_answer, model_answer in zip(gt_answers, model_answers):
-        if gt_answer == "nan" or model_answer == "nan":
-            score = 1.0 if gt_answer == model_answer else 0.0
-            rouge_1_scores.append(score)
-            rouge_l_scores.append(score)
-        elif gt_answer.strip() == "" or model_answer.strip() == "":
-            rouge_1_scores.append(0.0)
-            rouge_l_scores.append(0.0)
-        else:
-            scores = rouge.get_scores(model_answer, gt_answer)
-            rouge_1_scores.append(scores[0]["rouge-1"]["f"])
-            rouge_l_scores.append(scores[0]["rouge-l"]["f"])
 
-    avg_rouge_1 = np.mean(rouge_1_scores)
-    avg_rouge_l = np.mean(rouge_l_scores)
+def extract_first_number(text):
+    if pd.isna(text) or text == "":
+        return "NA"
+    
+    text_str = str(text).strip()
+    if text_str.lower() in ["nan", "none", "[na]", "na"]:
+        return "NA"
 
-    # Calculate BERTScore
-    P, R, F1 = bert_score.score(model_answers.tolist(), gt_answers.tolist(), lang="en", verbose=False)
-    avg_bert_f1 = F1.mean().item()
+    match = re.search(r'\d+', text_str)
+    return int(match.group()) if match else None
 
-    print(f"\nFinal Results:")
-    print(f"BLEU Score: {avg_bleu:.3f}")
-    print(f"ROUGE-1: {avg_rouge_1:.3f}")
-    print(f"ROUGE-L: {avg_rouge_l:.3f}")
-    print(f"BERTScore F1: {avg_bert_f1:.3f}")
 
-    return avg_bleu, avg_rouge_1, avg_rouge_l, avg_bert_f1
+# def compare_csvs(ground_truth_file, model_output_file):
+#     # Load the CSV files
+#     gt_df = pd.read_csv(ground_truth_file)
+#     model_df = pd.read_csv(model_output_file)
+    
+#     if len(gt_df) != len(model_df):
+#         print(f"Warning: Different number of rows - GT: {len(gt_df)}, Model: {len(model_df)}")
+#         return
+
+#     print(f"Comparing {len(gt_df)} rows...")
+#     print("=" * 50)
+
+#     # 1. SCORE-BASED EVALUATION
+#     print("1. SCORE-BASED METRICS")
+#     print("-" * 25)
+
+#     score_columns = ["exposure_score", "sensitivity_score", "adaptability_score"]
+
+#     for col in score_columns:
+#         print(f"\nAnalyzing {col}:")
+
+#         # Extract first numbers and convert to integers
+#         gt_numbers = [extract_first_number(val) for val in gt_df[col]]
+#         model_numbers = [extract_first_number(val) for val in model_df[col]]
+        
+#         # Filter out "NA" and None values for numeric comparison
+#         valid_pairs = [(gt, model) for gt, model in zip(gt_numbers, model_numbers) 
+#                        if gt != "NA" and model != "NA" and gt is not None and model is not None]
+        
+#         if valid_pairs:
+#             gt_valid, model_valid = zip(*valid_pairs)
+#             mae = mean_absolute_error(gt_valid, model_valid)
+#             print(f"  MAE: {mae:.3f} (on {len(valid_pairs)} valid numeric pairs)")
+#         else:
+#             print(f"  MAE: N/A (no valid numeric values to compare)")
+        
+#         # Calculate accuracy on all values (including None)
+#         accuracy = calculate_accuracy(gt_numbers, model_numbers)
+#         print(f"  Accuracy (exact match): {accuracy:.3f}")
+#         print(f"  Total samples: {len(gt_numbers)}")
+#         print(f"  Valid numeric pairs: {len(valid_pairs)}")
+
+#     # 2. MCQ EVALUATION
+#     print("\n2. MCQ METRICS")
+#     print("-" * 15)
+
+#     mcq_columns = ["temporal_scale_focus", "functional_system_focus", "spatial_scale_focus"]
+
+#     for col in mcq_columns:
+#         print(f"\nAnalyzing {col}:")
+
+#         gt_values = gt_df[col].astype(str)
+#         model_values = model_df[col].astype(str)
+
+#         gt_values = gt_values.replace(["nan", "NaN", "None", "[NA]"], "NA")
+#         model_values = model_values.replace(["nan", "NaN", "None", "[NA]"], "NA")
+
+#         f1 = f1_score(gt_values, model_values, average="macro", zero_division=0)
+#         precision = precision_score(gt_values, model_values, average="macro", zero_division=0)
+#         recall = recall_score(gt_values, model_values, average="macro", zero_division=0)
+
+#         print(f"  F1 Score: {f1:.3f}")
+#         print(f"  Precision: {precision:.3f}")
+#         print(f"  Recall: {recall:.3f}")
+
+#     # 3. QUESTION-ANSWER EVALUATION
+#     print("\n3. QUESTION-ANSWER METRICS")
+#     print("-" * 27)
+
+#     qa_column = "answer"
+#     gt_answers = gt_df[qa_column].astype(str)
+#     model_answers = model_df[qa_column].astype(str)
+
+#     # Calculate BLEU scores
+#     bleu_scores = []
+#     for gt_answer, model_answer in zip(gt_answers, model_answers):
+#         if gt_answer == "nan" or model_answer == "nan":
+#             bleu_scores.append(1.0 if gt_answer == model_answer else 0.0)
+#         elif gt_answer.strip() == "" or model_answer.strip() == "":
+#             bleu_scores.append(0.0)
+#         else:
+#             gt_words = gt_answer.split()
+#             model_words = model_answer.split()
+#             bleu = sentence_bleu([gt_words], model_words) if model_words else 0.0
+#             bleu_scores.append(bleu)
+
+#     avg_bleu = np.mean(bleu_scores)
+    
+#     # Calculate ROUGE scores
+#     rouge = Rouge()
+#     rouge_1_scores = []
+#     rouge_l_scores = []
+
+#     for gt_answer, model_answer in zip(gt_answers, model_answers):
+#         if gt_answer == "nan" or model_answer == "nan":
+#             score = 1.0 if gt_answer == model_answer else 0.0
+#             rouge_1_scores.append(score)
+#             rouge_l_scores.append(score)
+#         elif gt_answer.strip() == "" or model_answer.strip() == "":
+#             rouge_1_scores.append(0.0)
+#             rouge_l_scores.append(0.0)
+#         else:
+#             scores = rouge.get_scores(model_answer, gt_answer)
+#             rouge_1_scores.append(scores[0]["rouge-1"]["f"])
+#             rouge_l_scores.append(scores[0]["rouge-l"]["f"])
+
+#     avg_rouge_1 = np.mean(rouge_1_scores)
+#     avg_rouge_l = np.mean(rouge_l_scores)
+
+#     # Calculate BERTScore
+#     P, R, F1 = bert_score.score(model_answers.tolist(), gt_answers.tolist(), lang="en", verbose=False)
+#     avg_bert_f1 = F1.mean().item()
+
+#     print(f"\nFinal Results:")
+#     print(f"BLEU Score: {avg_bleu:.3f}")
+#     print(f"ROUGE-1: {avg_rouge_1:.3f}")
+#     print(f"ROUGE-L: {avg_rouge_l:.3f}")
+#     print(f"BERTScore F1: {avg_bert_f1:.3f}")
+
+    # return avg_bleu, avg_rouge_1, avg_rouge_l, avg_bert_f1
 
 
 def evaluate_single_model(ground_truth_file, model_file):
     gt_df = pd.read_csv(ground_truth_file)
     model_df = pd.read_csv(model_file)
     
-    if len(gt_df) != len(model_df):
-        print(f"Warning: Different number of rows - GT: {len(gt_df)}, Model: {len(model_df)}")
-        return None
     
     results = {}
     
     # 1. SCORE-BASED EVALUATION
     score_columns = ["exposure_score", "sensitivity_score", "adaptability_score"]
     for col in score_columns:
-        gt_values = gt_df[col].astype(str).replace(["nan", "NaN", "None", "[NA]"], "NA")
-        model_values = model_df[col].astype(str).replace(["nan", "NaN", "None", "[NA]"], "NA")
+        # Extract first numbers and convert to integers
+        gt_numbers = [extract_first_number(val) for val in gt_df[col]]
+        model_numbers = [extract_first_number(val) for val in model_df[col]]
         
-        results[f"{col}_accuracy"] = accuracy_score(gt_values, model_values)
+        # Calculate accuracy on all values (including None)
+        accuracy = calculate_accuracy(gt_numbers, model_numbers)
+        results[f"{col}_accuracy"] = accuracy
         
-        gt_numeric = pd.to_numeric(gt_df[col], errors="coerce")
-        model_numeric = pd.to_numeric(model_df[col], errors="coerce")
-        numeric_mask = ~(gt_numeric.isna() | model_numeric.isna())
+        # Filter out "NA" and None values for numeric comparison
+        valid_pairs = [(gt, model) for gt, model in zip(gt_numbers, model_numbers) 
+                       if gt != "NA" and model != "NA" and gt is not None and model is not None]
         
-        if numeric_mask.sum() > 0:
-            results[f"{col}_mae"] = mean_absolute_error(
-                gt_numeric[numeric_mask], model_numeric[numeric_mask]
-            )
+        if valid_pairs:
+            gt_valid, model_valid = zip(*valid_pairs)
+            results[f"{col}_mae"] = mean_absolute_error(gt_valid, model_valid)
         else:
             results[f"{col}_mae"] = float('nan')
     
