@@ -166,7 +166,7 @@ def parse_response(response):
         if key not in parsed_data:
             parsed_data[key] = "NA"
 
-    parsed_data["full_response"] = response
+    # parsed_data["full_response"] = response
     return parsed_data
 
 

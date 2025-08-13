@@ -13,12 +13,14 @@ LANGUAGE_ENGLISH = "english"
 
 HF_MODELS = {
     "1": "meta-llama/Meta-Llama-3-8B-Instruct",
-    "2": "Qwen/Qwen2.5-7B-Instruct",
-    "3": "Qwen/Qwen2.5-14B-Instruct",
-    "4": "Qwen/Qwen2.5-32B-Instruct",
-    "5": "Qwen/Qwen2.5-72B-Instruct",
-    "6": "mistralai/Ministral-8B-Instruct-2410",
-    "7": "mistralai/Mistral-Small-3.1-24B-Base-2503",
-    "8": "google/gemma-2-9b-it",
+    "2": "meta-llama/Llama-3.3-70B-Instruct",
+    "3": "Qwen/Qwen2.5-7B-Instruct",
+    "4": "Qwen/Qwen2.5-14B-Instruct",
+    "5": "Qwen/Qwen2.5-32B-Instruct",
+    "6": "Qwen/Qwen2.5-72B-Instruct",
+    "7": "mistralai/Ministral-8B-Instruct-2410",
+    "8": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    "9": "google/gemma-3-4b-it",
+    "10": "google/gemma-3-27b-it"
 }
-OPENAI_MODELS = {"9": "gpt-3.5-turbo", "10": "gpt-4", "11": "gpt-4o"}
+OPENAI_MODELS = {"11": "gpt-3.5-turbo", "12": "gpt-4", "13": "gpt-4o"}
