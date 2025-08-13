@@ -68,7 +68,7 @@ def parse_response(response):
         if key not in parsed_data:
             parsed_data[key] = 'NA'
     
-    parsed_data['full_response'] = response
+    # parsed_data['full_response'] = response
     return parsed_data
         
 def process_csv(input_file_path, output_file_path, max_rows=None):

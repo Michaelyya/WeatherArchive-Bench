@@ -1,8 +1,8 @@
-model_name,exposure_score_accuracy,exposure_score_mae,sensitivity_score_accuracy,sensitivity_score_mae,adaptability_score_accuracy,adaptability_score_mae,temporal_scale_focus_f1,temporal_scale_focus_precision,temporal_scale_focus_recall,functional_system_focus_f1,functional_system_focus_precision,functional_system_focus_recall,spatial_scale_focus_f1,spatial_scale_focus_precision,spatial_scale_focus_recall
-Qwen2.5-14B,0.364,0.528,0.257,0.779,0.415,0.445,0.114,0.113,0.121,0.118,0.146,0.121,0.126,0.2,0.231
-Qwen2.5-32B,0.534,0.394,0.501,0.46,0.516,0.377,0.264,0.265,0.264,0.163,0.175,0.163,0.165,0.198,0.231
-Qwen2.5-72B,0.469,0.45,0.6,0.321,0.531,0.336,0.106,0.107,0.109,0.131,0.155,0.129,0.106,0.167,0.15
-Qwen2.5-7B,0.084,1.023,0.278,0.565,0.394,0.385,0.133,0.203,0.127,0.113,0.127,0.116,0.123,0.191,0.219
-gpt-3.5-turbo,0.006,0.544,0.006,0.969,0.003,0.54,0.359,0.388,0.34,0.08,0.099,0.092,0.165,0.271,0.271
-gpt-4o,0.322,0.666,0.457,0.52,0.579,0.317,0.449,0.446,0.487,0.209,0.221,0.229,0.253,0.257,0.321
-llama-3-8b,0.37,0.605,0.358,0.636,0.361,0.472,0.022,0.118,0.116,0.002,0.003,0.002,0.129,0.137,0.205
+model_name,exposure_score_accuracy,exposure_score_mae,sensitivity_score_accuracy,sensitivity_score_mae,adaptability_score_accuracy,adaptability_score_mae,temporal_scale_focus_f1,temporal_scale_focus_precision,temporal_scale_focus_recall,functional_system_focus_f1,functional_system_focus_precision,functional_system_focus_recall,spatial_scale_focus_f1,spatial_scale_focus_precision,spatial_scale_focus_recall,bleu_score,rouge_1,rouge_l,bertscore_f1
+Qwen2.5-14B,0.46,0.53,0.358,0.73,0.519,0.433,0.114,0.113,0.121,0.118,0.146,0.121,0.126,0.2,0.231,0.075,0.326,0.287,0.886
+Qwen2.5-32B,0.573,0.397,0.531,0.462,0.546,0.377,0.264,0.265,0.264,0.163,0.175,0.163,0.165,0.198,0.231,0.101,0.385,0.338,0.899
+Qwen2.5-72B,0.501,0.446,0.636,0.326,0.57,0.33,0.106,0.107,0.109,0.131,0.155,0.129,0.106,0.167,0.15,0.098,0.375,0.336,0.898
+Qwen2.5-7B,0.087,1.043,0.284,0.585,0.403,0.399,0.133,0.203,0.127,0.113,0.127,0.116,0.123,0.191,0.219,0.071,0.336,0.289,0.888
+gpt-3.5-turbo,0.481,0.545,0.206,0.967,0.454,0.545,0.359,0.388,0.34,0.08,0.099,0.092,0.165,0.271,0.271,0.11,0.416,0.362,0.901
+gpt-4o,0.331,0.669,0.478,0.516,0.603,0.315,0.449,0.446,0.487,0.209,0.221,0.229,0.253,0.257,0.321,0.168,0.484,0.434,0.919
+llama-3-8b,0.427,0.636,0.412,0.659,0.433,0.473,0.022,0.118,0.116,0.002,0.003,0.002,0.129,0.137,0.205,0.092,0.351,0.308,0.888
