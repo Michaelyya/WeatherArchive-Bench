@@ -12,6 +12,10 @@ import chromadb
 import pandas as pd
 from chromadb.utils import embedding_functions
 import nltk
+import sys, os
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import glob
 
 nltk.download("punkt")
 nltk.download("punkt_tab")
@@ -50,6 +54,15 @@ def detokenize(tokens):
     return tokenizer.decode(tokens)
 
 
+def force_split_tokens(text, max_tokens=254):
+    tokens = tokenize(text)
+    chunks = []
+    for i in range(0, len(tokens), max_tokens):
+        chunk_tokens = tokens[i : i + max_tokens]
+        chunks.append(detokenize(chunk_tokens))
+    return chunks
+
+
 def safe_sent_tokenize(text):
     protected = {
         "No.": "No<dot>",
@@ -80,6 +93,16 @@ def chunk_text(text, max_tokens=256, overlap=100):
     while i < len(sentences):
         sentence = sentences[i]
         token_len = len(tokenize(sentence))
+
+        if token_len > max_tokens:
+            if current_chunk:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = []
+                current_len = 0
+            forced_chunks = force_split_tokens(sentence, max_tokens)
+            chunks.extend(forced_chunks)
+            i += 1
+            continue
 
         # If adding the sentence exceeds the max token limit
         if current_len + token_len > max_tokens:
@@ -130,157 +153,48 @@ def chunk_text(text, max_tokens=256, overlap=100):
     return chunks
 
 
-# Process each article in 1386 datasets
-df = pd.read_csv(FILE_1386_ADDRESS)
-current_id = collection.count()
+print("Current collection count before adding noise:", collection.count())
 
-for i, row in df.iterrows():
-    article = str(row["Article"])
-    chunks = chunk_text(article)
-    metadata = {"date": str(row["Date"])}
+# Process noise files and add them to the existing collection
+noise_folder = r"./embedding_loaders/raw_csv"
+files = glob.glob(os.path.join(noise_folder, "*_corrected.csv"))
+noise_id_counter = collection.count()  # Start IDs after existing ones
 
-    # Store each chunk into Chroma
-    for j, chunk in enumerate(chunks):
-        current_id += 1
-        collection.add(documents=[chunk], ids=[str(current_id)], metadatas=[metadata])
-    print(f"{i + 1}")
+for file_path in files:
+    print(f"Processing file: {file_path}")
+    df_noise = pd.read_csv(file_path, on_bad_lines="skip")
 
-print(
-    "Successfully write 1386 datasets into chroma. Total data size is:",
-    collection.count(),
-)
+    if "Text" not in df_noise.columns:
+        raise ValueError(f"{file_path} has no TEXT column")
 
-"""
-# Process each article in CORPUS datasets
-dataset = load_dataset("NLP-RISE/guardian_climate_news_corpus")
-df = dataset["train"].to_pandas()
+    chunks_to_add = []
+    ids_to_add = []
+    metadatas_to_add = []
 
-# Optional take a small subset to test
-subset = df.iloc[:2]
-current_id = collection.count()
+    for idx, row in df_noise.iterrows():
+        text = str(row["Text"])
+        chunks = chunk_text(text)
+        for chunk in chunks:
+            chunks_to_add.append(chunk)
+            ids_to_add.append(f"noise_{noise_id_counter}")
+            metadatas_to_add.append(
+                {
+                    "type": "noise",
+                    "date": str(row.get("Date", "")),
+                }
+            )
+            noise_id_counter += 1
 
-for i, row in subset.iterrows():
-    article = str(row["body"])
-    chunks = chunk_text(article)
-    metadata = {"date": str(row["date"])}
-
-    # Store each chunk into Chroma
-    for j, chunk in enumerate(chunks):
-        current_id += 1
+    # Add in batches
+    batch_size = 1000
+    for i in range(0, len(chunks_to_add), batch_size):
+        batch_end = min(i + batch_size, len(chunks_to_add))
         collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
+            documents=chunks_to_add[i:batch_end],
+            ids=ids_to_add[i:batch_end],
+            metadatas=metadatas_to_add[i:batch_end],
         )
+        print(f"Added {batch_end} noise chunks so far")
 
-print("Successfully write CORPUS datasets into chroma. Total data size is:", collection.count())
-
-
-# Load NER-formatted dataset
-def parse_ner_conll_file(path):
-    docs = []
-    current_tokens = []
-
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("-DOCSTART-"):
-                if current_tokens:
-                    docs.append(" ".join(current_tokens))
-                    current_tokens = []
-            elif line:
-                parts = line.split()
-                if len(parts) >= 1:
-                    word = parts[0]
-                    current_tokens.append(word)
-        if current_tokens:
-            docs.append(" ".join(current_tokens))
-    return docs
-
-# Load and insert NER chunks to Chroma
-ner_docs = parse_ner_conll_file("C:/Users/14821/Desktop/RAG/en.train.txt")[:2]   # replace with your NER file path
-current_id = collection.count()
-
-for text in ner_docs:
-    chunks = chunk_text(text)
-
-    metadata = {
-        "date": "N/A"
-    }
-
-    for chunk in chunks:
-        current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
-
-print("Successfully write NER datasets into chroma. Total data size is:", collection.count())
-
-#[TSV files]Process each articles in climateTXT
-df = pd.read_csv("C:/Users/14821/Desktop/RAG/AL-Wiki%20%28train%29.tsv", sep="\t")
-current_id = collection.count()
-subset = df.iloc[:2]
-
-for i, row in subset.iterrows():
-    text = str(row["sentence"])
-    chunks = chunk_text(text)
-    metadata = {
-        "date": "N/A"
-    }
-
-    for chunk in chunks:
-        current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
-
-print("Successfully write climateTXT_Wiki_Doc datasets into chroma. Total data size is:", collection.count())
-
-
-
-df = pd.read_csv("C:/Users/14821/Desktop/RAG/AL-10Ks.tsv%20%3A%203000%20%2858%20positives%2C%202942%20negatives%29%20%28TSV%2C%20127138%20KB%29.tsv", sep="\t")
-current_id = collection.count()
-subset = df.iloc[:2]
-
-for i, row in subset.iterrows():
-    text = str(row["sentence"])
-    chunks = chunk_text(text)
-    metadata = {
-        "date": "N/A"
-    }
-
-    for chunk in chunks:
-        current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
-
-print("Successfully write climateTXT_10Ks datasets into chroma. Total data size is:", collection.count())
-
-# Process Scientific abstract
-df = pd.read_csv(r"C:/Users/14821/Desktop/RAG/SciDCC.csv")
-subset = df.iloc[:2]
-current_id = collection.count()
-
-for i, row in subset.iterrows():
-    article = str(row["Body"])
-    chunks = chunk_text(article)
-    metadata = {"date": str(row["Date"])}
-
-    # Store each chunk into Chroma
-    for j, chunk in enumerate(chunks):
-        current_id += 1
-        collection.add(
-            documents=[chunk],
-            ids=[str(current_id)],
-            metadatas=[metadata]
-        )
-
-print("Successfully write Science Abstarct datasets into chroma. Total data size is:", collection.count())
-"""
+print("Noise data added successfully")
+print("Total chunks in collection:", collection.count())
