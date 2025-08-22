@@ -66,14 +66,6 @@ def dense_retrieve_local(
     return results
 
 
-def doct5_retrieve_local(df_queries: pd.DataFrame, passages_corpus, top_k: int = 100):
-    """
-    原 doct5 使用 TAS-B 作为 surrogate；现在在全量语料上检索 top_k。
-    """
-    model_name = "sentence-transformers/msmarco-distilbert-base-tas-b"
-    return dense_retrieve_local(df_queries, passages_corpus, model_name, top_k=top_k)
-
-
 def retrieve_with_ance(df_queries, passages_corpus, top_k: int = 100):
     return dense_retrieve_local(
         df_queries, passages_corpus, "castorini/ance-msmarco-passage", top_k=top_k
@@ -117,7 +109,6 @@ def run_and_eval_retrievers():
     passages_corpus = df_chunks["Text"].astype(str).tolist()
 
     retrievers = [
-        ("doct5", doct5_retrieve_local, f"{BASE_ADDRESS}/doct5.csv"),
         ("ance", retrieve_with_ance, f"{BASE_ADDRESS}/ance.csv"),
         ("colbert", retrieve_with_colbert, f"{BASE_ADDRESS}/colbert.csv"),
         ("unicoil", retrieve_with_unicoil, f"{BASE_ADDRESS}/unicoil.csv"),
