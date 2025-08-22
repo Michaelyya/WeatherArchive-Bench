@@ -12,6 +12,93 @@ from constant.constants import (
     FILE_CORRECT_PASSAGES_ADDRESS,  # e.g., "data/correct_passages.csv"
 )
 
+import torch
+import pandas as pd
+import tqdm
+import faiss
+from transformers import AutoModel, AutoTokenizer
+
+
+def encode_texts(texts, tokenizer, model, max_length=512, batch_size=16):
+    embeddings = []
+    for i in tqdm.trange(0, len(texts), batch_size, desc="Encoding texts"):
+        batch_texts = texts[i : i + batch_size]
+        inputs = tokenizer(
+            batch_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=max_length,
+        ).to(model.device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+            last_hidden = outputs.last_hidden_state  # (B, T, H)
+            cls_embeddings = last_hidden[:, 0, :]  # CLS token
+            cls_embeddings = torch.nn.functional.normalize(cls_embeddings, p=2, dim=1)
+            embeddings.append(cls_embeddings.cpu())
+
+    return torch.cat(embeddings, dim=0).numpy()
+
+
+def dense_retrieve_local_qwen_multi_gpu(
+    df_queries: pd.DataFrame,
+    passages_corpus,
+    model_name: str,
+    top_k: int = 100,
+):
+    """
+    多卡支持的 Qwen Embedding 模型本地检索器。
+    使用 transformers + device_map='auto' 来分配显存。
+    """
+
+    # 添加 id 列
+    if "id" not in df_queries.columns:
+        df_queries = df_queries.copy()
+        df_queries["id"] = df_queries.index.astype(str)
+    else:
+        df_queries = df_queries.copy()
+        df_queries["id"] = df_queries["id"].astype(str)
+
+    # 加载 tokenizer 和模型（多 GPU 自动分配）
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(
+        model_name,
+        device_map="auto",
+        torch_dtype=torch.float16,
+    )
+    model.eval()
+
+    # 处理 passage corpus
+    passages = [str(p) for p in passages_corpus if pd.notna(p)]
+    if not passages:
+        raise ValueError("passages_corpus 为空，请检查文本输入。")
+
+    # 编码所有 passages
+    passage_embeddings = encode_texts(passages, tokenizer, model)
+
+    # 使用 FAISS 构建索引
+    dim = passage_embeddings.shape[1]
+    index = faiss.IndexFlatIP(dim)
+    index.add(passage_embeddings)
+
+    # 查询并检索 top-k
+    results = {}
+    for _, row in tqdm.tqdm(
+        df_queries.iterrows(),
+        total=len(df_queries),
+        desc=f"Retrieving with {model_name}",
+    ):
+        qid = str(row["id"])
+        query = str(row["query"])
+
+        query_embedding = encode_texts([query], tokenizer, model)
+        k = min(top_k, len(passages))
+        scores, indices = index.search(query_embedding, k)
+        results[qid] = [passages[i] for i in indices[0]]
+
+    return results
+
 
 def dense_retrieve_local(
     df_queries: pd.DataFrame, passages_corpus, model_name: str, top_k: int = 100
@@ -146,14 +233,13 @@ def retrieve_with_qwen3_06b(df_queries, passages_corpus, top_k: int = 100):
 
 def retrieve_with_qwen3_4b(df_queries, passages_corpus, top_k: int = 100):
     # 效果/成本均衡
-    return dense_retrieve_local_qwen(
+    return dense_retrieve_local_qwen_multi_gpu(
         df_queries, passages_corpus, "Qwen/Qwen3-Embedding-4B", top_k=top_k
     )
 
 
 def retrieve_with_qwen3_8b(df_queries, passages_corpus, top_k: int = 100):
-    # 最强但资源占用高
-    return dense_retrieve_local_qwen(
+    return dense_retrieve_local_qwen_multi_gpu(
         df_queries, passages_corpus, "Qwen/Qwen3-Embedding-8B", top_k=top_k
     )
 
@@ -183,7 +269,7 @@ def run_and_eval_retrievers():
     passages_corpus = df_chunks["Text"].astype(str).tolist()
 
     retrievers = [
-        ("qwen3-0_6b", retrieve_with_qwen3_06b, f"{BASE_ADDRESS}/qwen3-0_6b.csv"),
+        # ("qwen3-0_6b", retrieve_with_qwen3_06b, f"{BASE_ADDRESS}/qwen3-0_6b.csv"),
         ("qwen3-4b", retrieve_with_qwen3_4b, f"{BASE_ADDRESS}/qwen3-4b.csv"),
         ("qwen3-8b", retrieve_with_qwen3_8b, f"{BASE_ADDRESS}/qwen3-8b.csv"),
     ]

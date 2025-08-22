@@ -14,9 +14,13 @@ metrics_columns = [
     "recall@1",
     "recall@5",
     "recall@10",
+    "recall@50",
+    "recall@100",
     "mrr@1",
     "mrr@5",
     "mrr@10",
+    "mrr@50",
+    "mrr@100",
 ]
 
 overall_data = []
