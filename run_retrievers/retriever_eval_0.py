@@ -123,8 +123,8 @@ def run_and_eval_retrievers():
     passages_corpus = df_chunks["Text"].astype(str).tolist()
 
     retrievers = [
-        ("bm25_okapi", retrieve_with_bm25_okapi, f"{BASE_ADDRESS}/bm25_okapi.csv"),
-        ("bm25l", retrieve_with_bm25l, f"{BASE_ADDRESS}/bm25l.csv"),
+        # ("bm25_okapi", retrieve_with_bm25_okapi, f"{BASE_ADDRESS}/bm25_okapi.csv"),
+        # ("bm25l", retrieve_with_bm25l, f"{BASE_ADDRESS}/bm25l.csv"),
         ("bm25plus", retrieve_with_bm25plus, f"{BASE_ADDRESS}/bm25plus.csv"),
     ]
 
