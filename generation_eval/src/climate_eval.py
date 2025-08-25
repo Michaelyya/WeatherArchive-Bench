@@ -84,7 +84,8 @@ def initialize_hf_model(model_name: str):
 
 
 def generate_hf_answer(prompt: str, model, tokenizer):
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096).to("cuda")
+    device = next(model.parameters()).device
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096).to(device)
     
     with torch.no_grad():
         outputs = model.generate(
