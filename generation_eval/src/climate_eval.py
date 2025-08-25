@@ -24,19 +24,15 @@ dotenv.load_dotenv()
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY")
 )
-# API_KEY = os.environ.get("HUGGINGFACE_API_KEY", "")
-# if API_KEY:
-#     login(token=API_KEY)
-#     print("Hugging Face authentication successful")
 
-# huggingface_models = [
-#     "meta-llama/Meta-Llama-3-8B-Instruct",
-#     "Qwen/Qwen2.5-7B-Instruct",
-#     "mistralai/Mixtral-8x7B-Instruct-v0.1",
-#     "Qwen/Qwen2.5-14B-Instruct",
-#     "google/gemma-2-9b-it",
-#     "mistralai/Mistral-Small-24B-Instruct-2501"
-# ]
+# Hugging Face authentication
+API_KEY = os.environ.get("HUGGINGFACE_API_KEY", "")
+if API_KEY:
+    login(token=API_KEY)
+    print("Hugging Face authentication successful")
+
+# Global models and tokenizers for open source models
+loaded_hf_models = {}
 
 
 def check_gpu_memory():
@@ -154,14 +150,26 @@ def load_models(selected_models: List[str]):
     for model_id in selected_models:
         if model_id in HF_MODELS:
             model_name = HF_MODELS[model_id]
-            model, tokenizer = initialize_hf_model(model_name)
+            
+            # Check if model is already loaded
+            if model_name in loaded_hf_models:
+                model, tokenizer = loaded_hf_models[model_name]
+                print(f"Using already loaded HF model: {model_name}")
+            else:
+                try:
+                    model, tokenizer = initialize_hf_model(model_name)
+                    loaded_hf_models[model_name] = (model, tokenizer)
+                    print(f"Successfully loaded HF model: {model_name}")
+                except Exception as e:
+                    print(f"Error loading model {model_name}: {e}")
+                    continue
+            
             loaded_models[model_id] = {
                 'type': 'hf',
                 'name': model_name,
                 'model': model,
                 'tokenizer': tokenizer
             }
-            print(f"Successfully loaded HF model: {model_name}")
         
         elif model_id in OPENAI_MODELS:
             model_name = OPENAI_MODELS[model_id]
