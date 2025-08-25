@@ -17,7 +17,7 @@ from constant.constants import (
     FILE_CANDIDATE_POOL_ADDRESS,
     FILE_DESTINATION_ADDRESS,
 )
-from constant.climate_framework import climate_assessment_prompt, system_prompt
+from constant.climate_framework import climate_assessment_prompt_zero_shot, system_prompt
 
 dotenv.load_dotenv()
 
@@ -83,7 +83,7 @@ def generate_hf_answer(prompt: str, model, tokenizer):
         outputs = model.generate(
             **inputs, 
             max_new_tokens=2000,
-            temperature=0.2,
+            temperature=0.6,
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id
         )
@@ -102,8 +102,8 @@ def generate_openai_answer(prompt: str, model_name: str):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
-        temperature=0.2,
-        max_tokens=2000
+        temperature=0.6,
+        max_tokens=3000
     )
     return response.choices[0].message.content.strip()
 
@@ -121,24 +121,23 @@ def parse_response(response: str):
             if key == 'Region':
                 parsed_data['region'] = value
             elif key == 'Exposure':
-                parsed_data['exposure_score'] = value
+                parsed_data['exposure'] = value
             elif key == 'Sensitivity':
-                parsed_data['sensitivity_score'] = value
+                parsed_data['sensitivity'] = value
             elif key == 'Adaptability':
-                parsed_data['adaptability_score'] = value
-            elif key == 'Temporal_Scale':
-                parsed_data['temporal_scale_focus'] = value
-            elif key == 'Functional_System':
-                parsed_data['functional_system_focus'] = value
-            elif key == 'Spatial_Scale':
-                parsed_data['spatial_scale_focus'] = value
+                parsed_data['adaptability'] = value
+            elif key == 'Temporal':
+                parsed_data['temporal'] = value
+            elif key == 'Functional':
+                parsed_data['functional'] = value
+            elif key == 'Spatial':
+                parsed_data['spatial'] = value
             elif key == 'Answer':
                 parsed_data['answer'] = value
     
     default_keys = [
-        'region', 'exposure_score', 'sensitivity_score', 'adaptability_score', 
-        'temporal_scale_focus', 'functional_system_focus',
-        'spatial_scale_focus', 'answer'
+        'region', 'exposure', 'sensitivity', 'adaptability', 
+        'temporal', 'functional', 'spatial'
     ]
     
     for key in default_keys:
@@ -176,7 +175,7 @@ def load_models(selected_models: List[str]):
 
 
 def generate_answer_with_model(query: str, context: str, model_id: str, loaded_models: Dict):
-    prompt = climate_assessment_prompt.format(query=query, context=context)
+    prompt = climate_assessment_prompt_zero_shot.format(query=query, context=context)
     
     model_info = loaded_models[model_id]
     
@@ -202,14 +201,12 @@ def process_single_query(row, model_id: str, loaded_models: Dict, correct_passag
         'model_id': model_id,
         'model_name': loaded_models[model_id]['name'],
         'region': parsed_data['region'],
-        'exposure_score': parsed_data['exposure_score'],
-        'sensitivity_score': parsed_data['sensitivity_score'],
-        'adaptability_score': parsed_data['adaptability_score'],
-        'temporal_scale_focus': parsed_data['temporal_scale_focus'],
-        'functional_system_focus': parsed_data['functional_system_focus'],
-        'spatial_scale_focus': parsed_data['spatial_scale_focus'],
-        'answer': parsed_data['answer'],
-        'full_response': parsed_data['full_response']
+        'exposure': parsed_data['exposure'],
+        'sensitivity': parsed_data['sensitivity'],
+        'adaptability': parsed_data['adaptability'],
+        'temporal': parsed_data['temporal'],
+        'functional': parsed_data['functional'],
+        'spatial': parsed_data['spatial'],
     }
 
 
@@ -265,7 +262,7 @@ def select_models_interactive():
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Multi-Model ClimateRAG Evaluation")
+    parser = argparse.ArgumentParser(description="Multi-Model Climate Evaluation")
     parser.add_argument("--models", type=str, help="Comma-separated model IDs (e.g., 1,3,7,8)")
     parser.add_argument("--input_path", type=str, default=FILE_CANDIDATE_POOL_ADDRESS, help="Path to input CSV")
     parser.add_argument("--output_path", type=str, default=FILE_DESTINATION_ADDRESS, help="Path to save output CSV")
