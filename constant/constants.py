@@ -23,7 +23,7 @@ HF_MODELS = {
     "9": "google/gemma-3-4b-it",
     "10": "google/gemma-3-27b-it"
 }
-OPENAI_MODELS = {"11": "gpt-3.5-turbo", "12": "gpt-4", "13": "gpt-4o"}
+OPENAI_MODELS = {"11": "gpt-3.5-turbo", "12": "gpt-4o", "13": "gpt-4.1"}
 
 FILE_QUERY_ADDRESS = "run_retrievers/qa_pair/queries.csv"
 FILE_CONCATENATED_CHUNKS_ADDRESS = "run_retrievers/qa_pair/concatenated_chunks.csv"

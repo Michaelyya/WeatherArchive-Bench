@@ -7,7 +7,7 @@ from typing import Dict, Any
 import os
 import dotenv
 from openai import OpenAI
-from prompts.climate_framework import validate_ground_truth
+from constant.climate_framework import validate_ground_truth
 
 dotenv.load_dotenv()
 client = OpenAI(
