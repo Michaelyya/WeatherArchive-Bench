@@ -1,288 +1,231 @@
+import os
 import pandas as pd
-from sentence_transformers import SentenceTransformer
-import faiss
+import numpy as np
 import tqdm
-from run_retrievers.utils import evaluate_retriever_performance
-from run_retrievers.utils import BASE_ADDRESS
-
-# 若这些常量尚未在 constants 中定义，可用字符串路径直接替换
-from constant.constants import (
-    FILE_QUERY_ADDRESS,  # e.g., "data/query.csv"
-    FILE_CONCATENATED_CHUNKS_ADDRESS,  # e.g., "data/concatenated_chunks.csv"
-    FILE_CORRECT_PASSAGES_ADDRESS,  # e.g., "data/correct_passages.csv"
-)
-
+import faiss
 import torch
-import pandas as pd
-import tqdm
-import faiss
+
+from sentence_transformers import SentenceTransformer
 from transformers import AutoModel, AutoTokenizer
 
+# === 你的工程里的常量（如没有可直接换成字符串路径） ===
+from constant.constants import (
+    FILE_QUERY_ADDRESS,  # e.g., "data/queries.csv"（需要 'query' 列）
+    FILE_CONCATENATED_CHUNKS_ADDRESS,  # e.g., "data/concatenated_chunks.csv"（需要 'Text' 列）
+)
+from run_retrievers.utils import BASE_ADDRESS  # e.g., "run_retrievers/retriever_eval"
 
-def encode_texts(texts, tokenizer, model, max_length=512, batch_size=16):
-    embeddings = []
+
+# -----------------------------
+# 基础工具
+# -----------------------------
+def ensure_id_column(df: pd.DataFrame, id_col: str = "id") -> pd.DataFrame:
+    """确保 DF 存在字符串类型的唯一 id 列；若不存在则用行号生成。"""
+    df = df.copy()
+    if id_col not in df.columns:
+        df[id_col] = df.index.astype(str)
+    else:
+        df[id_col] = df[id_col].astype(str)
+    return df
+
+
+def save_raw_results_as_csv(
+    results: dict,
+    df_queries: pd.DataFrame,
+    output_path: str,
+    top_k: int = 100,
+):
+    """
+    将 {qid: [doc_id, ...]} 写成 raw CSV：
+    列：query, top_1, ..., top_k
+    行按 df_queries 的顺序输出。
+    """
+    rows = []
+    for _, row in df_queries.iterrows():
+        qid = str(row["id"])
+        query = str(row["query"])
+        ids = results.get(qid, [])
+        ids = (ids + [""] * top_k)[:top_k]
+        rows.append([query] + ids)
+
+    columns = ["query"] + [f"top_{i}" for i in range(1, top_k + 1)]
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    pd.DataFrame(rows, columns=columns).to_csv(output_path, index=False)
+    print(f"[Saved] {output_path}")
+
+
+# -----------------------------
+# SentenceTransformer 路线（单卡/自动）
+# -----------------------------
+def dense_retrieve_local_ids_st(
+    df_queries: pd.DataFrame,
+    df_chunks: pd.DataFrame,
+    model_name: str,
+    top_k: int = 100,
+):
+    """
+    使用 SentenceTransformer + FAISS；返回 {qid: [doc_id, ...]}。
+    """
+    passages = df_chunks["Text"].astype(str).tolist()
+    ids = df_chunks["id"].astype(str).tolist()
+    if not passages:
+        raise ValueError("语料为空：concatenated_chunks.csv 未找到可用的 'Text'。")
+
+    print(f"[ST:{model_name}] Loading model...")
+    model = SentenceTransformer(model_name)
+
+    print(f"[ST:{model_name}] Encoding passages...")
+    p_emb = model.encode(
+        passages,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        show_progress_bar=True,
+    )
+    dim = p_emb.shape[1]
+    index = faiss.IndexFlatIP(dim)
+    index.add(p_emb)
+
+    results = {}
+    print(f"[ST:{model_name}] Retrieving...")
+    for _, row in tqdm.tqdm(
+        df_queries.iterrows(), total=len(df_queries), desc=f"Retrieving {model_name}"
+    ):
+        qid = str(row["id"])
+        query = str(row["query"])
+        q_emb = model.encode([query], convert_to_numpy=True, normalize_embeddings=True)
+        k = min(top_k, len(passages))
+        _, idx = index.search(q_emb, k)
+        results[qid] = [ids[i] for i in idx[0]]
+
+    return results
+
+
+# -----------------------------
+# Qwen Embedding 路线（transformers，多卡）
+# -----------------------------
+def encode_texts_qwen(texts, tokenizer, model, max_length=512, batch_size=16):
+    """对一批文本做 CLS 向量 + L2 归一化，返回 numpy 数组。"""
+    emb_chunks = []
     for i in tqdm.trange(0, len(texts), batch_size, desc="Encoding texts"):
-        batch_texts = texts[i : i + batch_size]
+        batch = texts[i : i + batch_size]
         inputs = tokenizer(
-            batch_texts,
+            batch,
             return_tensors="pt",
             padding=True,
             truncation=True,
             max_length=max_length,
         ).to(model.device)
-
         with torch.no_grad():
             outputs = model(**inputs)
-            last_hidden = outputs.last_hidden_state  # (B, T, H)
-            cls_embeddings = last_hidden[:, 0, :]  # CLS token
-            cls_embeddings = torch.nn.functional.normalize(cls_embeddings, p=2, dim=1)
-            embeddings.append(cls_embeddings.cpu())
-
-    return torch.cat(embeddings, dim=0).numpy()
+            cls = outputs.last_hidden_state[:, 0, :]  # [B, H]
+            cls = torch.nn.functional.normalize(cls, p=2, dim=1)  # L2 norm
+        emb_chunks.append(cls.cpu())
+    return torch.cat(emb_chunks, dim=0).numpy()
 
 
-def dense_retrieve_local_qwen_multi_gpu(
+def dense_retrieve_local_ids_qwen(
     df_queries: pd.DataFrame,
-    passages_corpus,
+    df_chunks: pd.DataFrame,
     model_name: str,
     top_k: int = 100,
 ):
     """
-    多卡支持的 Qwen Embedding 模型本地检索器。
-    使用 transformers + device_map='auto' 来分配显存。
+    使用 Qwen Embedding（transformers + device_map='auto'）做检索；返回 {qid: [doc_id, ...]}。
     """
+    passages = df_chunks["Text"].astype(str).tolist()
+    ids = df_chunks["id"].astype(str).tolist()
+    if not passages:
+        raise ValueError("语料为空：concatenated_chunks.csv 未找到可用的 'Text'。")
 
-    # 添加 id 列
-    if "id" not in df_queries.columns:
-        df_queries = df_queries.copy()
-        df_queries["id"] = df_queries.index.astype(str)
-    else:
-        df_queries = df_queries.copy()
-        df_queries["id"] = df_queries["id"].astype(str)
-
-    # 加载 tokenizer 和模型（多 GPU 自动分配）
+    print(f"[Qwen:{model_name}] Loading model/tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModel.from_pretrained(
-        model_name,
-        device_map="auto",
-        torch_dtype=torch.float16,
+        model_name, device_map="auto", torch_dtype=torch.float16
     )
     model.eval()
 
-    # 处理 passage corpus
-    passages = [str(p) for p in passages_corpus if pd.notna(p)]
-    if not passages:
-        raise ValueError("passages_corpus 为空，请检查文本输入。")
-
-    # 编码所有 passages
-    passage_embeddings = encode_texts(passages, tokenizer, model)
-
-    # 使用 FAISS 构建索引
-    dim = passage_embeddings.shape[1]
+    print(f"[Qwen:{model_name}] Encoding passages...")
+    p_emb = encode_texts_qwen(passages, tokenizer, model)
+    dim = p_emb.shape[1]
     index = faiss.IndexFlatIP(dim)
-    index.add(passage_embeddings)
+    index.add(p_emb)
 
-    # 查询并检索 top-k
     results = {}
+    print(f"[Qwen:{model_name}] Retrieving...")
     for _, row in tqdm.tqdm(
-        df_queries.iterrows(),
-        total=len(df_queries),
-        desc=f"Retrieving with {model_name}",
+        df_queries.iterrows(), total=len(df_queries), desc=f"Retrieving {model_name}"
     ):
         qid = str(row["id"])
         query = str(row["query"])
-
-        query_embedding = encode_texts([query], tokenizer, model)
+        q_emb = encode_texts_qwen([query], tokenizer, model)
         k = min(top_k, len(passages))
-        scores, indices = index.search(query_embedding, k)
-        results[qid] = [passages[i] for i in indices[0]]
+        _, idx = index.search(q_emb, k)
+        results[qid] = [ids[i] for i in idx[0]]
 
     return results
 
 
-def dense_retrieve_local(
-    df_queries: pd.DataFrame, passages_corpus, model_name: str, top_k: int = 100
-):
-    """
-    通用的本地稠密检索（全量语料库）。保持与原 evaluate_retriever_performance 的输出结构一致：
-    返回 {qid(str): [passage_str, ...]}
-    """
-    # 若无 id 列，则用行号作为 id
-    if "id" not in df_queries.columns:
-        df_queries = df_queries.copy()
-        df_queries["id"] = df_queries.index.astype(str)
-    else:
-        df_queries = df_queries.copy()
-        df_queries["id"] = df_queries["id"].astype(str)
-
-    model = SentenceTransformer(model_name)
-
-    # 预编码整库（只对每个模型做一次）
-    passages = [str(p) for p in passages_corpus if pd.notna(p)]
-    if not passages:
-        raise ValueError(
-            "passages_corpus 为空，请检查 concatenated_chunks.csv 的 Text 列。"
-        )
-
-    passage_embeddings = model.encode(
-        passages,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=True,
-    )
-
-    dim = passage_embeddings.shape[1]
-    index = faiss.IndexFlatIP(dim)
-    index.add(passage_embeddings)
-
-    results = {}
-    for _, row in tqdm.tqdm(
-        df_queries.iterrows(),
-        total=len(df_queries),
-        desc=f"Retrieving with {model_name}",
-    ):
-        qid = str(row["id"])
-        query = str(row["query"])
-
-        query_embedding = model.encode(
-            [query], convert_to_numpy=True, normalize_embeddings=True
-        )
-        k = min(top_k, len(passages))
-        scores, indices = index.search(query_embedding, k)
-        results[qid] = [passages[i] for i in indices[0]]
-    return results
-
-
-def dense_retrieve_local_qwen(
-    df_queries: pd.DataFrame,
-    passages_corpus,
-    model_name: str,
-    query_prompt_name: str = "query",
-    top_k: int = 100,
-):
-    """
-    针对 Qwen-Embed 的本地稠密检索（全量语料库）。
-    若 sentence-transformers 版本支持，将在查询侧使用 prompt_name="query"；不支持则回退为普通 encode。
-    """
-    # 若无 id 列，则用行号作为 id
-    if "id" not in df_queries.columns:
-        df_queries = df_queries.copy()
-        df_queries["id"] = df_queries.index.astype(str)
-    else:
-        df_queries = df_queries.copy()
-        df_queries["id"] = df_queries["id"].astype(str)
-
-    model = SentenceTransformer(model_name)
-
-    # 预编码整库
-    passages = [str(p) for p in passages_corpus if pd.notna(p)]
-    if not passages:
-        raise ValueError(
-            "passages_corpus 为空，请检查 concatenated_chunks.csv 的 Text 列。"
-        )
-
-    passage_embeddings = model.encode(
-        passages,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=True,
-    )
-
-    dim = passage_embeddings.shape[1]
-    index = faiss.IndexFlatIP(dim)
-    index.add(passage_embeddings)
-
-    results = {}
-    for _, row in tqdm.tqdm(
-        df_queries.iterrows(),
-        total=len(df_queries),
-        desc=f"Retrieving with {model_name}",
-    ):
-        qid = str(row["id"])
-        query = str(row["query"])
-
-        # 尝试使用 Qwen 的查询 prompt；不支持则回退
-        try:
-            query_embedding = model.encode(
-                [query],
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-                prompt_name=query_prompt_name,
-            )
-        except TypeError:
-            # 一些旧版本不支持 prompt_name
-            query_embedding = model.encode(
-                [query], convert_to_numpy=True, normalize_embeddings=True
-            )
-
-        k = min(top_k, len(passages))
-        scores, indices = index.search(query_embedding, k)
-        results[qid] = [passages[i] for i in indices[0]]
-    return results
-
-
-# -------- Qwen Embedding 模型封装（可按需增删）--------
-
-
-def retrieve_with_qwen3_06b(df_queries, passages_corpus, top_k: int = 100):
-    # 轻量版
-    return dense_retrieve_local_qwen(
-        df_queries, passages_corpus, "Qwen/Qwen3-Embedding-0.6B", top_k=top_k
+# -----------------------------
+# 具体模型封装（按需增删）
+# -----------------------------
+def retrieve_with_qwen3_4b(df_queries, df_chunks, top_k: int = 100):
+    return dense_retrieve_local_ids_qwen(
+        df_queries, df_chunks, "Qwen/Qwen3-Embedding-4B", top_k=top_k
     )
 
 
-def retrieve_with_qwen3_4b(df_queries, passages_corpus, top_k: int = 100):
-    # 效果/成本均衡
-    return dense_retrieve_local_qwen_multi_gpu(
-        df_queries, passages_corpus, "Qwen/Qwen3-Embedding-4B", top_k=top_k
+def retrieve_with_qwen3_8b(df_queries, df_chunks, top_k: int = 100):
+    return dense_retrieve_local_ids_qwen(
+        df_queries, df_chunks, "Qwen/Qwen3-Embedding-8B", top_k=top_k
     )
 
 
-def retrieve_with_qwen3_8b(df_queries, passages_corpus, top_k: int = 100):
-    return dense_retrieve_local_qwen_multi_gpu(
-        df_queries, passages_corpus, "Qwen/Qwen3-Embedding-8B", top_k=top_k
+def retrieve_with_qwen3_0_6b(df_queries, df_chunks, top_k: int = 100):
+    return dense_retrieve_local_ids_qwen(
+        df_queries, df_chunks, "Qwen/Qwen3-Embedding-0.6B", top_k=top_k
     )
 
 
-def run_and_eval_retrievers():
-    # 读取三份文件
-    df_queries = pd.read_csv(FILE_QUERY_ADDRESS)  # 列: query（可无 id）
-    df_chunks = pd.read_csv(FILE_CONCATENATED_CHUNKS_ADDRESS)  # 列: Text
-    df_golds = pd.read_csv(
-        FILE_CORRECT_PASSAGES_ADDRESS
-    )  # 列: correct_passage（与 query 对齐）
+def retrieve_with_st_sbert(df_queries, df_chunks, top_k: int = 100):
+    return dense_retrieve_local_ids_st(
+        df_queries,
+        df_chunks,
+        "sentence-transformers/msmarco-distilbert-base-tas-b",
+        top_k=top_k,
+    )
 
-    # 统一 id，并把 gold 对齐到 queries（便于评估函数内部使用）
-    if "id" not in df_queries.columns:
-        df_queries["id"] = df_queries.index.astype(str)
-    else:
-        df_queries["id"] = df_queries["id"].astype(str)
 
-    if "correct_passage" in df_golds.columns and len(df_golds) == len(df_queries):
-        df_queries = df_queries.copy()
-        df_queries["correct_passage"] = df_golds["correct_passage"]
-    else:
-        print(
-            "WARNING: correct_passages.csv 行数与 query.csv 不一致，或缺少 'correct_passage' 列，跳过对齐。"
-        )
+# -----------------------------
+# 主流程：仅输出 RAW CSV（query + top_1..top_100 的 id）
+# -----------------------------
+def run_retrievers_and_dump_raw():
+    # 读取数据并保证有 id
+    df_queries = pd.read_csv(FILE_QUERY_ADDRESS)
+    if "query" not in df_queries.columns:
+        raise ValueError("queries.csv 需要包含列 'query'。")
+    df_queries = ensure_id_column(df_queries, "id")
 
-    passages_corpus = df_chunks["Text"].astype(str).tolist()
+    df_chunks = pd.read_csv(FILE_CONCATENATED_CHUNKS_ADDRESS)
+    if "Text" not in df_chunks.columns:
+        raise ValueError("concatenated_chunks.csv 需要包含列 'Text'。")
+    df_chunks = ensure_id_column(df_chunks, "id")
 
+    # 你可以按需增删模型
     retrievers = [
-        # ("qwen3-0_6b", retrieve_with_qwen3_06b, f"{BASE_ADDRESS}/qwen3-0_6b.csv"),
-        ("qwen3-4b", retrieve_with_qwen3_4b, f"{BASE_ADDRESS}/qwen3-4b.csv"),
-        ("qwen3-8b", retrieve_with_qwen3_8b, f"{BASE_ADDRESS}/qwen3-8b.csv"),
+        ("qwen3-0_6b", retrieve_with_qwen3_0_6b)
+        # 如果想对比一个 ST 模型，也可以打开：
+        # ("sbert",    retrieve_with_st_sbert),
     ]
 
-    for name, fn, path in retrievers:
-        print(f"\nRunning retriever: {name}")
+    for name, fn in retrievers:
+        print(f"\n=== Running retriever: {name} ===")
         try:
-            results = fn(df_queries, passages_corpus)
-            evaluate_retriever_performance(results, path)
+            results = fn(df_queries, df_chunks, top_k=100)
+            out_path = os.path.join(BASE_ADDRESS, f"raw_model_result_{name}.csv")
+            save_raw_results_as_csv(results, df_queries, out_path, top_k=100)
         except Exception as e:
-            print(f"Retriever '{name}' failed with error:\n{e}")
-            continue
+            print(f"[Skipped] retriever '{name}' failed: {e}")
 
 
 if __name__ == "__main__":
-    run_and_eval_retrievers()
+    run_retrievers_and_dump_raw()
