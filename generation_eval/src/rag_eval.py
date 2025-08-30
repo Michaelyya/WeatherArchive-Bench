@@ -7,23 +7,28 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import time
 import argparse
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List
 from huggingface_hub import login
 import torch.cuda
 
 from constant.constants import (
     HF_MODELS,
     OPENAI_MODELS,
-    FILE_CANDIDATE_POOL_ADDRESS,
-    FILE_DESTINATION_ADDRESS,
 )
-from constant.climate_framework import RAG_Answering_prompt, system_prompt
+from constant.climate_framework import RAG_Answering_prompt
 
 dotenv.load_dotenv()
 
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY")
 )
+
+# Hugging Face authentication
+API_KEY = os.environ.get("HUGGINGFACE_API_KEY", "")
+if API_KEY:
+    login(token=API_KEY)
+    print("Hugging Face authentication successful")
+
 
 def check_gpu_memory():
     if torch.cuda.is_available():
@@ -37,7 +42,6 @@ def check_gpu_memory():
 def initialize_hf_model(model_name: str):
     print(f"Loading Hugging Face model: {model_name}")
     
-    # Check GPU memory first
     check_gpu_memory()
     
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -53,7 +57,7 @@ def initialize_hf_model(model_name: str):
     
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        device_map="auto",  # Let it auto-detect GPU
+        device_map="auto",
         quantization_config=config,
         torch_dtype=torch.float16
     )
@@ -63,12 +67,13 @@ def initialize_hf_model(model_name: str):
 
 
 def generate_hf_answer(prompt: str, model, tokenizer):
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096).to("cuda")
+    device = next(model.parameters()).device
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096).to(device)
     
     with torch.no_grad():
         outputs = model.generate(
             **inputs, 
-            max_new_tokens=3000,
+            max_new_tokens=2000,
             temperature=0.6,
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id
@@ -85,11 +90,10 @@ def generate_openai_answer(prompt: str, model_name: str):
     response = client.chat.completions.create(
         model=model_name,
         messages=[
-            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
         temperature=0.6,
-        max_tokens=3000
+        max_tokens=2000
     )
     return response.choices[0].message.content.strip()
 
@@ -120,9 +124,9 @@ def load_models(selected_models: List[str]):
     return loaded_models
 
 
-def generate_rag_answer_with_model(query: str, context_chunks: List[str], model_id: str, loaded_models: Dict):
-    # Combine all context chunks into a single context string
-    combined_context = "\n\n".join([f"Chunk {i+1}: {chunk}" for i, chunk in enumerate(context_chunks)])
+def generate_rag_answer(query: str, top3_contexts: List[str], model_id: str, loaded_models: Dict):
+    # Combine top3 contexts into a single context string
+    combined_context = "\n\n".join([f"Context {i+1}: {context}" for i, context in enumerate(top3_contexts)])
     
     prompt = RAG_Answering_prompt.format(query=query, context=combined_context)
     
@@ -136,31 +140,30 @@ def generate_rag_answer_with_model(query: str, context_chunks: List[str], model_
     return response
 
 
-def process_single_rag_query(row, model_id: str, loaded_models: Dict, context_columns: List[str]):
+def process_single_query(row, model_id: str, loaded_models: Dict):
     query = row['query']
     
-    # Collect all available context chunks
-    context_chunks = []
-    for col in context_columns:
-        if col in row and pd.notna(row[col]) and str(row[col]).strip():
-            context_chunks.append(str(row[col]).strip())
+    # Collect top3 contexts
+    top3_contexts = []
+    for i in range(1, 4):
+        col_name = f'top_{i}_text'
+        if col_name in row and pd.notna(row[col_name]) and str(row[col_name]).strip():
+            top3_contexts.append(str(row[col_name]).strip())
     
-    if not context_chunks:
+    if not top3_contexts:
         return None
     
-    rag_answer = generate_rag_answer_with_model(query, context_chunks, model_id, loaded_models)
+    rag_answer = generate_rag_answer(query, top3_contexts, model_id, loaded_models)
     
     return {
         'query': query,
-        'context_chunks_count': len(context_chunks),
-        'model_id': model_id,
         'model_name': loaded_models[model_id]['name'],
         'rag_answer': rag_answer,
-        'context_chunks': context_chunks
+        'top3_contexts': top3_contexts
     }
 
 
-def process_csv_rag_evaluation(input_file_path: str, base_output_dir: str, selected_models: List[str], max_rows=None):
+def process_csv_generation(input_file_path: str, base_output_dir: str, selected_models: List[str], max_rows=None):
     df = pd.read_csv(input_file_path)
     
     if max_rows is not None:
@@ -168,9 +171,7 @@ def process_csv_rag_evaluation(input_file_path: str, base_output_dir: str, selec
     
     loaded_models = load_models(selected_models)
     
-    # Identify context columns (passage_1, passage_2, etc.)
-    context_columns = [col for col in df.columns if col.startswith('passage_')]
-    print(f"Found context columns: {context_columns}")
+    print(f"Processing {len(df)} queries with {len(selected_models)} models")
     
     # Process each model separately and save to individual files
     for model_id in selected_models:
@@ -178,9 +179,8 @@ def process_csv_rag_evaluation(input_file_path: str, base_output_dir: str, selec
             continue
             
         model_name = loaded_models[model_id]['name']
-        # Clean model name for filename (remove special characters)
         safe_model_name = model_name.replace('/', '_').replace('-', '_').replace(' ', '_')
-        output_file_path = os.path.join(base_output_dir, f"rag_eval_{safe_model_name}.csv")
+        output_file_path = os.path.join(base_output_dir, f"rag_generation_{safe_model_name}.csv")
         
         print(f"\nProcessing model: {model_name}")
         print(f"Output will be saved to: {output_file_path}")
@@ -188,11 +188,12 @@ def process_csv_rag_evaluation(input_file_path: str, base_output_dir: str, selec
         all_results = []
         
         for index, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing {model_name}"):
-            result = process_single_rag_query(row, model_id, loaded_models, context_columns)
+            result = process_single_query(row, model_id, loaded_models)
             if result:
                 all_results.append(result)
             time.sleep(0.5)
             
+            # Save progress every 10 rows
             if (index + 1) % 10 == 0:
                 temp_df = pd.DataFrame(all_results)
                 temp_df.to_csv(f'{output_file_path}.temp', index=False)    
@@ -208,6 +209,7 @@ def process_csv_rag_evaluation(input_file_path: str, base_output_dir: str, selec
             
             results_df.to_csv(output_file_path, index=False, escapechar="\\")
             
+            # Clean up temp file
             temp_file = f'{output_file_path}.temp'
             if os.path.exists(temp_file):
                 os.remove(temp_file)
@@ -218,6 +220,7 @@ def process_csv_rag_evaluation(input_file_path: str, base_output_dir: str, selec
 
 
 def select_models_interactive():
+    print("Available models:")
     for key, value in HF_MODELS.items():
         print(f"{key}: {value}")
     
@@ -225,15 +228,15 @@ def select_models_interactive():
     for key, value in OPENAI_MODELS.items():
         print(f"{key}: {value}")
     
-    choice = input("Model selection: ").strip()
+    choice = input("Model selection (comma-separated): ").strip()
     selected = [x.strip() for x in choice.split(',')]
     return selected
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="RAG Evaluation with Multiple Models")
+    parser = argparse.ArgumentParser(description="RAG Generation with Multiple Models")
     parser.add_argument("--models", type=str, help="Comma-separated model IDs (e.g., 1,3,7,8)")
-    parser.add_argument("--input_path", type=str, default=FILE_CANDIDATE_POOL_ADDRESS, help="Path to input CSV")
+    parser.add_argument("--input_path", type=str, default="output-top3.csv", help="Path to input CSV with top3 context")
     parser.add_argument("--output_dir", type=str, default="generation_eval/output", help="Directory to save output CSV files")
     parser.add_argument("--max_rows", type=int, default=None, help="Optional: max rows to process")
     return parser.parse_args()
@@ -252,11 +255,11 @@ if __name__ == "__main__":
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
     
-    process_csv_rag_evaluation(
+    process_csv_generation(
         input_file_path=args.input_path,
         base_output_dir=args.output_dir,
         selected_models=selected_models,
         max_rows=args.max_rows
     )
     
-    print(f"RAG evaluation completed. Results saved to: {args.output_dir}") 
+    print(f"RAG generation completed. Results saved to: {args.output_dir}")
