@@ -11,6 +11,11 @@ from typing import Dict, List
 from huggingface_hub import login
 import torch.cuda
 
+# Set HuggingFace cache to scratch directory to avoid disk quota issues
+os.environ['HF_HOME'] = '/scratch/hf_cache'
+os.environ['TRANSFORMERS_CACHE'] = '/scratch/hf_cache'
+os.environ['HF_DATASETS_CACHE'] = '/scratch/hf_cache'
+
 from constant.constants import (
     HF_MODELS,
     OPENAI_MODELS,
@@ -44,7 +49,12 @@ def initialize_hf_model(model_name: str):
     
     check_gpu_memory()
     
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # Use scratch directory for model caching to avoid disk quota issues
+    cache_dir = "/scratch/hf_cache"
+    os.makedirs(cache_dir, exist_ok=True)
+    print(f"Using cache directory: {cache_dir}")
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
@@ -59,7 +69,8 @@ def initialize_hf_model(model_name: str):
         model_name,
         device_map="auto",
         quantization_config=config,
-        torch_dtype=torch.float16
+        torch_dtype=torch.float16,
+        cache_dir=cache_dir
     )
     model.gradient_checkpointing_enable()
     
