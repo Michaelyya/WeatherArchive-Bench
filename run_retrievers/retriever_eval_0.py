@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import tqdm
@@ -7,24 +8,23 @@ from constant.constants import FILE_QUERY_ADDRESS, FILE_CONCATENATED_CHUNKS_ADDR
 from run_retrievers.utils import BASE_ADDRESS
 
 
-# -----------------------------
-# BM25 检索（返回 id 而不是文本）
-# -----------------------------
 def bm25_retrieve_local_ids(df_queries, df_chunks, bm25_builder, top_k=100):
     passages = df_chunks["Text"].astype(str).tolist()
     ids = df_chunks["id"].astype(str).tolist()
-
-    tokenized_corpus = [p.split() for p in passages]  # 简单分词
+    tokenized_corpus = [p.split() for p in passages]
     bm25 = bm25_builder(tokenized_corpus)
 
     results = {}
-    for _, row in tqdm.tqdm(df_queries.iterrows(), total=len(df_queries), desc=f"BM25-{bm25_builder.__name__}"):
+    for _, row in tqdm.tqdm(
+        df_queries.iterrows(),
+        total=len(df_queries),
+        desc=f"BM25-{bm25_builder.__name__}",
+    ):
         qid = str(row["id"])
         query = str(row["query"])
         tokenized_query = query.split()
 
-        # rank_bm25 的 get_top_n 只能返回文本，这里我们手动算分数
-        scores = bm25.get_scores(tokenized_query)  # ndarray(len(corpus),)
+        scores = bm25.get_scores(tokenized_query)
         top_idx = np.argsort(scores)[::-1][:top_k]
         results[qid] = [ids[i] for i in top_idx]
 
@@ -45,17 +45,34 @@ def save_raw_results(results, df_queries, output_path, top_k=100):
     print(f"Saved: {output_path}")
 
 
-# -----------------------------
-# CE Cross-Encoder 重排序（对 BM25 的候选进行 rerank）
-# -----------------------------
-def ce_rerank_ids(df_queries, df_chunks, bm25_results, ce_model_name="cross-encoder/ms-marco-MiniLM-L-6-v2", top_k=100, batch_size=128):
-    # 预备 id -> text 映射
+# ✅ 修改后的 reranker（更稳健 + 改命名）
+def ce_rerank_ids(
+    df_queries,
+    df_chunks,
+    bm25_results,
+    ce_model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+    top_k=100,
+    batch_size=128,
+):
+    from transformers import logging
+
+    logging.set_verbosity_error()
+
     id2text = dict(zip(df_chunks["id"].astype(str), df_chunks["Text"].astype(str)))
 
-    model = CrossEncoder(ce_model_name)  # 自动用 GPU（若可用）
+    try:
+        model = CrossEncoder(ce_model_name)
+    except Exception as e:
+        print(f"❌ 加载模型失败: {ce_model_name}\n{e}")
+        return {}
+
     results = {}
 
-    for _, row in tqdm.tqdm(df_queries.iterrows(), total=len(df_queries), desc=f"CE rerank ({ce_model_name})"):
+    for _, row in tqdm.tqdm(
+        df_queries.iterrows(),
+        total=len(df_queries),
+        desc=f"CE rerank ({ce_model_name})",
+    ):
         qid = str(row["id"])
         query = str(row["query"])
 
@@ -65,15 +82,23 @@ def ce_rerank_ids(df_queries, df_chunks, bm25_results, ce_model_name="cross-enco
             continue
 
         pairs = [(query, id2text[cid]) for cid in candidate_ids if cid in id2text]
+        if not pairs:
+            results[qid] = []
+            continue
 
-        # 批量预测分数
         scores = []
         for i in range(0, len(pairs), batch_size):
-            batch_pairs = pairs[i:i+batch_size]
-            batch_scores = model.predict(batch_pairs)  # 越大越相关
-            scores.extend(batch_scores.tolist() if hasattr(batch_scores, "tolist") else list(batch_scores))
+            batch_pairs = pairs[i : i + batch_size]
+            try:
+                batch_scores = model.predict(batch_pairs)
+                if hasattr(batch_scores, "tolist"):
+                    scores.extend(batch_scores.tolist())
+                else:
+                    scores.extend(list(batch_scores))
+            except Exception as e:
+                print(f"❌ 模型预测失败（query: {qid}）: {e}")
+                scores.extend([0.0] * len(batch_pairs))
 
-        # 按分数排序并取前 top_k
         order = np.argsort(scores)[::-1]
         reranked_ids = [candidate_ids[i] for i in order[:top_k]]
         results[qid] = reranked_ids
@@ -85,19 +110,16 @@ def run_and_eval_retrievers():
     TOP_K = 100
     CE_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-    # 读 queries
     df_queries = pd.read_csv(FILE_QUERY_ADDRESS)
     if "id" not in df_queries.columns:
         df_queries = df_queries.reset_index().rename(columns={"index": "id"})
     df_queries["id"] = df_queries["id"].astype(str)
 
-    # 读 chunks，加 id
     df_chunks = pd.read_csv(FILE_CONCATENATED_CHUNKS_ADDRESS)
     if "id" not in df_chunks.columns:
         df_chunks = df_chunks.reset_index().rename(columns={"index": "id"})
     df_chunks["id"] = df_chunks["id"].astype(str)
 
-    # -------- BM25 三种原始结果（3 个 CSV）--------
     bm25_variants = [
         ("BM25Plus", BM25Plus),
         ("BM25L", BM25L),
@@ -112,10 +134,15 @@ def run_and_eval_retrievers():
         out_raw = f"{BASE_ADDRESS}/raw_{name}_result.csv"
         save_raw_results(res, df_queries, out_raw, top_k=TOP_K)
 
-    # -------- CE 对三种 BM25 的候选做重排（3 个 CSV）--------
     for name, _ in bm25_variants:
-        ce_res = ce_rerank_ids(df_queries, df_chunks, bm25_results_map[name], ce_model_name=CE_MODEL, top_k=TOP_K)
-        out_ce = f"{BASE_ADDRESS}/ce_reranked_{name}_result.csv"
+        ce_res = ce_rerank_ids(
+            df_queries,
+            df_chunks,
+            bm25_results_map[name],
+            ce_model_name=CE_MODEL,
+            top_k=TOP_K,
+        )
+        out_ce = f"{BASE_ADDRESS}/raw_{name}_ce_reranked.csv"  # ✅ 更一致的命名
         save_raw_results(ce_res, df_queries, out_ce, top_k=TOP_K)
 
 
