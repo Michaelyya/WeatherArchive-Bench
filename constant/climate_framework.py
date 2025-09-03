@@ -58,8 +58,8 @@ INSTRUCTIONS:
 - Consider all retrieved document chunks together before answering.
 - Synthesize the information; do not repeat text verbatim unless quoting is necessary for evidence.
 - Ensure that your answer is **directly relevant to the query** and grounded in the provided context.
-- Clearly indicate when you are paraphrasing versus quoting.
 - Avoid adding information not supported by the provided chunks.
+- If the retrieved chunks are not relevant to the query, should claim there is no mention in the provided contexts.
 
 INPUT:
 Query: {query}
