@@ -21,9 +21,15 @@ HF_MODELS = {
     "7": "mistralai/Ministral-8B-Instruct-2410",
     "8": "mistralai/Mixtral-8x7B-Instruct-v0.1",
     "9": "google/gemma-3-4b-it",
-    "10": "google/gemma-3-27b-it"
+    "10": "google/gemma-3-27b-it",
 }
 OPENAI_MODELS = {"11": "gpt-3.5-turbo", "12": "gpt-4o", "13": "gpt-4.1"}
+DEEPSEEK_MODELS = {
+    "14": "DeepSeek-V3",
+    "15": "claude-sonnet-4-20250514",
+    "16": "claude-opus-4-1-20250805",
+    "17": "gemini-2.5-pro",
+}
 
 FILE_QUERY_ADDRESS = "run_retrievers/qa_pair/queries.csv"
 FILE_CONCATENATED_CHUNKS_ADDRESS = "run_retrievers/qa_pair/concatenated_chunks.csv"
