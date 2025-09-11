@@ -3,6 +3,9 @@ import os
 import time
 import math
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import pandas as pd
 import numpy as np
 import faiss
@@ -17,6 +20,7 @@ from run_retrievers.utils import BASE_ADDRESS  # e.g., "run_retrievers/retriever
 
 # --- Google Gemini SDK ---
 import google.generativeai as genai
+
 
 # ============ 工具函数（与原思路一致） ============
 
@@ -33,24 +37,58 @@ def ensure_id_column(df: pd.DataFrame, id_col: str = "id") -> pd.DataFrame:
     return df
 
 
-# ============ Gemini 嵌入封装 ============
+# ============ 全局令牌桶限速器（线程安全） ============
+
+
+class RateLimiter:
+    """
+    简单令牌桶：跨线程共享 RPM 配额，避免并发时触发服务端限流。
+    rpm: 每分钟允许的请求数
+    """
+
+    def __init__(self, rpm: int):
+        self.capacity = max(1, int(rpm))
+        self.tokens = float(self.capacity)
+        self.fill_rate = self.capacity / 60.0  # 每秒补充多少 token
+        self.timestamp = time.monotonic()
+        self.lock = threading.Lock()
+
+    def acquire(self, tokens: int = 1):
+        # 阻塞，直到拿到 tokens
+        while True:
+            with self.lock:
+                now = time.monotonic()
+                elapsed = now - self.timestamp
+                if elapsed > 0:
+                    self.tokens = min(
+                        self.capacity, self.tokens + elapsed * self.fill_rate
+                    )
+                    self.timestamp = now
+                if self.tokens >= tokens:
+                    self.tokens -= tokens
+                    return
+                # 计算需要等待的时间（不持锁等待）
+                needed = tokens - self.tokens
+                wait_s = needed / self.fill_rate if self.fill_rate > 0 else 0.1
+            time.sleep(wait_s)
+
+
+# ============ Gemini 嵌入封装（支持多线程） ============
 
 
 class GeminiEmbedder:
     """
-    统一封装 Google Gemini Embedding 调用。
-    - 默认使用 'models/gemini-embedding-001'
-    - 如果你的环境只支持新命名，可自动回退到 'models/text-embedding-004'
-    - 提供批量 embed_texts，带简单重试与速率控制
+    统一封装 Google Gemini Embedding 调用（多线程友好）。
+    - 默认 'models/gemini-embedding-001'，不可用则回退 'models/text-embedding-004'
+    - embed_texts 支持 num_threads>1 时并行，每次请求经过全局 RateLimiter
     """
 
     def __init__(
         self,
         api_key_env: str = "GOOGLE_API_KEY",
         model_candidates=("models/gemini-embedding-001", "models/text-embedding-004"),
-        requests_per_minute: int = 300,  # 简单节流：可按项目配额调整
+        requests_per_minute: int = 300,  # 全局 RPM
         max_retries: int = 5,
-        timeout_sec: float = 30.0,
     ):
         api_key = os.environ.get(api_key_env, "")
         if not api_key:
@@ -59,90 +97,104 @@ class GeminiEmbedder:
             )
         genai.configure(api_key=api_key)
 
+        self._candidates = list(model_candidates)
         self.model_name = None
-        self._pick_first_available_model(model_candidates)
-        self.rpm = max(1, requests_per_minute)
-        self.sleep_between = 60.0 / self.rpm
+        self._lock = threading.Lock()
         self.max_retries = max_retries
-        self.timeout_sec = timeout_sec
+        self.rate_limiter = RateLimiter(requests_per_minute)
 
-    def _pick_first_available_model(self, candidates):
-        # 直接使用首选；若调用失败会在 embed 时自动尝试下一个
-        if isinstance(candidates, (list, tuple)) and len(candidates) > 0:
-            self.model_name = candidates[0]
-            self._fallbacks = list(candidates[1:])
-        else:
-            self.model_name = "models/gemini-embedding-001"
-            self._fallbacks = ["models/text-embedding-004"]
+        # 预先选择可用模型，保证并发时维度一致
+        self._ensure_working_model()
+
+    # ---- 内部方法 ----
+
+    def _ensure_working_model(self):
+        last_err = None
+        for m in self._candidates:
+            try:
+                _ = self._embed_once(m, "healthcheck")
+                self.model_name = m
+                return
+            except Exception as e:
+                last_err = e
+                continue
+        raise RuntimeError(
+            f"没有可用的 Gemini 嵌入模型：{self._candidates}；最后错误：{last_err}"
+        )
 
     def _embed_once(self, model_name: str, text: str):
         """
         单条调用；返回 list[float]
         """
-        # 注意：google-generativeai 的 embeddings API
-        # 文本字段统一放在 input 或者 content 参数上（不同 SDK 版本略有差异）。
-        # 这里优先使用 embed_content；部分版本也可用 embed_content(model=..., content=...).
-        return genai.embed_content(
-            model=model_name,
-            content=text,
-        )["embedding"]
+        # 注意：google-generativeai 的 embeddings API 参数名在不同版本略有差异。
+        # 这里采用 embed_content(model=..., content=...)
+        resp = genai.embed_content(model=model_name, content=text)
+        # SDK 返回一般为 {"embedding": [...]} 或 {"embedding": {"values": [...]}}，两种都兼容
+        emb = resp.get("embedding")
+        if isinstance(emb, dict) and "values" in emb:
+            emb = emb["values"]
+        return emb
 
-    def embed_texts(self, texts, batch_size: int = 128, desc: str = "Encoding"):
+    def _embed_with_retry(self, text: str) -> np.ndarray:
+        attempt = 0
+        while True:
+            # 全局限速
+            self.rate_limiter.acquire(1)
+            try:
+                vec = self._embed_once(self.model_name, str(text))
+                return np.asarray(vec, dtype="float32")
+            except Exception as e:
+                attempt += 1
+                # 如果是模型 404 之类，尝试一次回退（极少出现，因为已健康检查）
+                if (
+                    "model not found" in str(e).lower() or "404" in str(e).lower()
+                ) and attempt == 1:
+                    with self._lock:
+                        # 再扫描候选找一个可用的
+                        self._ensure_working_model()
+                    continue
+                if attempt >= self.max_retries:
+                    raise
+                time.sleep(min(2**attempt, 8))  # 指数退避
+
+    # ---- 对外方法 ----
+
+    def embed_texts(self, texts, num_threads: int = 1, desc: str = "Encoding"):
         """
-        批量嵌入，返回 shape = (N, dim) 的 np.ndarray
-        - 自动使用当前模型名；如果失败，会对备用模型名重试
+        批量嵌入，返回 (N, D) 的 float32 ndarray。支持多线程并发。
+        - num_threads=1：顺序执行（兼容原来行为）
+        - num_threads>1：使用线程池 + 全局 RateLimiter
         """
         if not texts:
             return np.zeros((0, 0), dtype="float32")
 
-        all_vecs = []
-        pbar = tqdm.tqdm(
-            range(0, len(texts), batch_size),
-            desc=desc,
-            total=math.ceil(len(texts) / batch_size),
-        )
-        cur_model = self.model_name
-        fallbacks = list(self._fallbacks)
+        N = len(texts)
+        # 单线程路径
+        if num_threads <= 1:
+            all_vecs = []
+            for t in tqdm.tqdm(texts, desc=desc, total=N):
+                all_vecs.append(self._embed_with_retry(t))
+            emb = np.vstack(all_vecs)
+        else:
+            # 多线程路径：按索引收集结果，保证返回顺序与输入一致
+            results = [None] * N
+            with ThreadPoolExecutor(max_workers=num_threads) as ex:
+                futures = {
+                    ex.submit(self._embed_with_retry, texts[i]): i for i in range(N)
+                }
+                pbar = tqdm.tqdm(total=N, desc=f"{desc} (threads={num_threads})")
+                for fut in as_completed(futures):
+                    i = futures[fut]
+                    try:
+                        results[i] = fut.result()
+                    except Exception as e:
+                        # 这里直接抛出，外层会捕获；也可以选择写 None 并继续
+                        raise RuntimeError(f"Embedding 失败（index={i}）：{e}")
+                    finally:
+                        pbar.update(1)
+                pbar.close()
+            emb = np.vstack(results)
 
-        for start in pbar:
-            end = min(start + batch_size, len(texts))
-            batch = texts[start:end]
-
-            # 调用 + 重试
-            attempt = 0
-            while True:
-                try:
-                    batch_vecs = []
-                    for t in batch:
-                        vec = self._embed_once(cur_model, str(t))
-                        batch_vecs.append(vec)
-                        time.sleep(self.sleep_between)  # 简单节流
-                    vecs = np.array(batch_vecs, dtype="float32")
-                    all_vecs.append(vecs)
-                    break
-                except Exception as e:
-                    attempt += 1
-                    # 如果还有备用模型，换一个再试
-                    if ("model not found" in str(e).lower() or "404" in str(e)) and len(
-                        fallbacks
-                    ) > 0:
-                        alt = fallbacks.pop(0)
-                        print(
-                            f"[GeminiEmbedder] 模型 {cur_model} 不可用，切换到 {alt} 重试…"
-                        )
-                        cur_model = alt
-                        continue
-                    if attempt >= self.max_retries:
-                        raise RuntimeError(
-                            f"Gemini embedding 失败（模型：{cur_model}){e}"
-                        )
-                    sleep_s = min(2**attempt, 8)  # 指数退避
-                    print(
-                        f"[GeminiEmbedder] 调用失败，{sleep_s}s 后重试（{attempt}/{self.max_retries}）：{e}"
-                    )
-                    time.sleep(sleep_s)
-
-        emb = np.vstack(all_vecs)
         # 归一化（与原实现一致，用内积索引 ~ 余弦）
         norms = np.linalg.norm(emb, axis=1, keepdims=True) + 1e-12
         emb = emb / norms
@@ -157,6 +209,7 @@ def dense_retrieve_local_ids(
     df_chunks: pd.DataFrame,
     embedder: GeminiEmbedder,
     top_k: int = 100,
+    num_threads: int = 15,  # 新增：控制 passages 并发线程数
 ):
     """
     使用 GeminiEmbedder + FAISS 做密集检索，返回每个 query 的 top_k 文档 **id 列表**。
@@ -169,9 +222,9 @@ def dense_retrieve_local_ids(
     if len(passages) == 0:
         raise ValueError("语料为空：未在 concatenated_chunks.csv 中找到可用的 'Text'。")
 
-    print("[Gemini] Encoding passages...")
+    print("[Gemini] Encoding passages (multi-threading)...")
     passage_embeddings = embedder.embed_texts(
-        passages, batch_size=128, desc="Encoding passages"
+        passages, num_threads=num_threads, desc="Encoding passages"  # <<<<<< 并发！
     )
     dim = passage_embeddings.shape[1]
 
@@ -181,6 +234,7 @@ def dense_retrieve_local_ids(
 
     results = {}
     print("[Gemini] Retrieving ...")
+    # 查询通常较少，就单线程即可；如果你的 query 也很多，可把 num_threads 也传进来
     for _, row in tqdm.tqdm(
         df_queries.iterrows(),
         total=len(df_queries),
@@ -188,7 +242,7 @@ def dense_retrieve_local_ids(
     ):
         qid = str(row["id"])
         query = str(row["query"])
-        q_emb = embedder.embed_texts([query], batch_size=1, desc="Encoding queries")
+        q_emb = embedder.embed_texts([query], num_threads=1, desc="Encoding queries")
         k = min(top_k, len(passages))
         scores, indices = index.search(q_emb, k)
         top_idx = indices[0]
@@ -238,7 +292,7 @@ def run_retrievers_and_dump_raw():
     embedder = GeminiEmbedder(
         api_key_env="GOOGLE_API_KEY",
         model_candidates=("models/gemini-embedding-001", "models/text-embedding-004"),
-        requests_per_minute=300,
+        requests_per_minute=300,  # 这里是“全局 RPM”，会被 15 线程共享
         max_retries=5,
     )
 
@@ -255,6 +309,7 @@ def run_retrievers_and_dump_raw():
                 df_chunks=df_chunks,
                 embedder=emb,
                 top_k=100,
+                num_threads=15,  # <<<<<< 设置 15 个线程
             )
             out_path = os.path.join(BASE_ADDRESS, f"raw_model_result_{short_name}.csv")
             save_raw_results_as_csv(results, df_queries, out_path, top_k=100)
