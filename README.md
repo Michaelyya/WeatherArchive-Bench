@@ -1,18 +1,11 @@
-# WeatherRAG: Weather Archive Retrieval-Augmented Generation for Climate Impact Assessment
+# WeatherArchive-Bench: Benchmarking Retrieval-Augmented Reasoning for Historical Weather Archives
 
-This repository contains the implementation and evaluation framework for WeatherRAG, a comprehensive system for retrieving and analyzing historical weather data to assess climate impacts using Retrieval-Augmented Generation (RAG) techniques.
+This repository contains constructed datasets and evaluation frameworks for WeatherArchive-Bench. It comprises two tasks: WeatherArchive-Retrieval, which measures a system’s ability to locate historically relevant passages from over one million archival news segments, and WeatherArchive-Assessment, which evaluates whether Large Language Models (LLMs) can classify societal vulnerability and resilience indicators from extreme weather narratives.
 
 ## 📁 Project Structure
 
 ```
 WXImpactRAG/
-├── 📁 Annotation/                    # Human annotation data
-│   ├── HumanAnnotatedAllen.csv       # Annotations by Allen
-│   ├── HumanAnnotatedAngela.csv      # Annotations by Angela
-│   ├── HumanAnnotatedDanny.csv       # Annotations by Danny
-│   ├── HumanAnnotatedMichael.csv     # Annotations by Michael
-│   └── alt_test_llm_as_judge.py      # LLM-based annotation evaluation
-│
 ├── 📁 constant/                      # Configuration and constants
 │   ├── climate_framework.py          # IPCC vulnerability framework definitions
 │   └── constants.py                  # File paths and model configurations
@@ -28,8 +21,6 @@ WXImpactRAG/
 │
 ├── 📁 GroundTruth/                   # Ground truth datasets
 │   ├── ground_truth_climate.csv      # Climate assessment ground truth
-│   ├── LongCTX_Dataset(350).csv      # Long context evaluation dataset
-│   ├── MixedCTX_Dataset(1386).csv    # Mixed context evaluation dataset
 │   ├── QACandidate_Pool.csv          # Question-answer candidate pool
 │   └── QACorrect_Passages.csv        # Correct passage annotations
 │
@@ -59,13 +50,13 @@ WXImpactRAG/
 
 ## 🔬 Experiments and Evaluation
 
-### Experiment 1: Retrieval Performance Evaluation
+### WeatherArchive-Retrieval
 
 **Objective**: Evaluate the effectiveness of various retrieval methods for historical weather data.
 
 **Methods Evaluated**:
 
-- **Sparse Retrieval**: BM25 variants (BM25Okapi, BM25Plus, BM25L) with cross-encoder reranking
+- **Sparse Retrieval**: BM25 variants (BM25Okapi, BM25Plus) with cross-encoder reranking
 - **Dense Retrieval**:
   - SentenceTransformer models (SBERT, SPLADE)
   - ANCE and UniCoil models
@@ -74,17 +65,10 @@ WXImpactRAG/
   - Arctic Embed 2.0 and Granite Embedding R2
   - Google Gemini embedding models
 
-**Metrics**: Recall@k, nDCG@k, MRR@k, BLEU@1 (k ∈ {1,3,5,10,50,100})
 
-**Key Findings**:
+### WeatherArchive-Assessment
 
-- **Best Overall Performance**: Gemini Embedding 001 (Recall@100: 95.8%, nDCG@100: 58.8%)
-- **Strong Sparse Methods**: BM25Okapi with cross-encoder reranking (Recall@100: 83.0%)
-- **Competitive Dense Methods**: Arctic Embed 2.0 (Recall@100: 91.0%), OpenAI text-embedding-3-large
-
-### Experiment 2: Climate Impact Assessment
-
-**Objective**: Evaluate LLM performance in climate vulnerability and resilience assessment using IPCC framework.
+**Objective**: Evaluate LLM performance in societal vulnerability and resilience assessment related to extreme weather events based on a well-crafted framework referenced from prior meteorological research. 
 
 **Assessment Framework**:
 
@@ -96,13 +80,6 @@ WXImpactRAG/
   - Temporal Scale: Short-term absorptive | Medium-term adaptive | Long-term transformative
   - Functional System: Health | Energy | Food | Water | Transportation | Information
   - Spatial Scale: Local | Regional | National
-
-**Models Evaluated**:
-
-- GPT-4o, GPT-3.5-turbo
-- Qwen2.5 variants (7B, 14B, 32B, 72B)
-
-**Evaluation Method**: Human annotation comparison with LLM-as-a-judge validation
 
 ## 📊 Key Results Summary
 
@@ -116,12 +93,6 @@ WXImpactRAG/
 | OpenAI-3-large           | 89.6%      | 57.1%     | 47.1%     | 50.2%     |
 | ANCE                     | 86.6%      | 40.8%     | 29.3%     | 27.6%     |
 
-### Climate Assessment Insights
-
-- **Model Performance**: GPT-4o demonstrates superior performance in climate vulnerability assessment
-- **Framework Effectiveness**: IPCC vulnerability framework provides structured assessment capabilities
-- **Domain Adaptation**: Weather-specific retrieval significantly improves climate impact analysis
-- **Multi-scale Analysis**: Effective evaluation across temporal, functional, and spatial dimensions
 
 ## 🚀 Getting Started
 
@@ -170,25 +141,10 @@ python -m WeatherArchive_Assessment.src.rag_eval
 
 - Model configurations in `constant/constants.py`
 - Climate framework definitions in `constant/climate_framework.py`
-- File paths and evaluation parameters customizable
+- File paths and evaluation parameters are customizable
 
-## 📄 Citation
 
-If you use this work, please cite:
-
-```bibtex
-@article{weatherrag2026,
-  title={WeatherRAG: Weather Archive Retrieval-Augmented Generation for Climate Impact Assessment},
-  author={[Authors]},
-  journal={ICLR},
-  year={2026}
-}
-```
-
-## 📞 Contact
-
-For questions or collaboration, please contact [contact information].
 
 ---
 
-_This repository contains the complete implementation and evaluation framework for WeatherRAG, enabling comprehensive assessment of climate impacts through historical weather data analysis._
+_This repository contains the complete implementation and evaluation framework for WeatherArchive-Bench_
