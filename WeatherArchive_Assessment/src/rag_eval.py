@@ -25,13 +25,8 @@ from constant.climate_framework import RAG_Answering_prompt
 
 dotenv.load_dotenv()
 
-api_key = os.getenv("AIHUBMIX_API_KEY")
-# client = OpenAI(
-#     api_key=os.environ.get("OPENAI_API_KEY")
-# )
 client = OpenAI(
-    base_url="https://aihubmix.com/v1",
-    api_key=api_key,
+    api_key=os.environ.get("OPENAI_API_KEY")
 )
 
 # Hugging Face authentication
@@ -283,7 +278,7 @@ def parse_args():
     parser.add_argument(
         "--input_path",
         type=str,
-        default="output-top3.csv",
+        default="data/output-top3.csv",
         help="Path to input CSV with top3 context",
     )
     parser.add_argument(
