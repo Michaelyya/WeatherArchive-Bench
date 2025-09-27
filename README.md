@@ -102,7 +102,7 @@ WXImpactRAG/
 pip install -r requirements.txt
 ```
 
-### Running Retrieval Evaluation
+### Running WeatherArchive-Retrieval
 
 ```bash
 # BM25 variants with cross-encoder reranking
@@ -120,14 +120,17 @@ python -m WeatherArchive_Retrieval.retriever_eval_7  # Gemini models
 python -m WeatherArchive_Retrieval.overall
 ```
 
-### Running Climate Assessment
-
+### Running WeatherArchive-Assessment
 ```bash
-# Climate impact evaluation
+# Societal Vulnerability and Resilience Indicator Classification
 python -m WeatherArchive_Assessment.src.climate_eval
+# Data analyze
+python -m WeatherArchive_Assessment.src.classification_metrics
 
-# RAG evaluation
+# Free-form Question Answering 
 python -m WeatherArchive_Assessment.src.rag_eval
+# Data analyze
+python -m WeatherArchive_Assessment.src.QA_metrics
 ```
 
 ## 📝 Data Requirements

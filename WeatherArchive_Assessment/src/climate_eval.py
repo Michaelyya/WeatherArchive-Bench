@@ -29,23 +29,14 @@ from constant.climate_framework import (
 )
 
 dotenv.load_dotenv()
-api_key = os.getenv("AIHUBMIX_API_KEY")
-# client = OpenAI(
-#     api_key=os.environ.get("OPENAI_API_KEY")
-# )
 client = OpenAI(
-    base_url="https://aihubmix.com/v1",
-    api_key=api_key,
+    api_key=os.environ.get("OPENAI_API_KEY")
 )
-
-
-# Hugging Face authentication
 API_KEY = os.environ.get("HUGGINGFACE_API_KEY", "")
 if API_KEY:
     login(token=API_KEY)
     print("Hugging Face authentication successful")
 
-# Global models and tokenizers for open source models
 loaded_hf_models = {}
 
 
@@ -62,11 +53,7 @@ def check_gpu_memory():
 
 def initialize_hf_model(model_name: str):
     print(f"Loading Hugging Face model: {model_name}")
-
-    # Check GPU memory first
     check_gpu_memory()
-
-    # Use scratch directory for model caching to avoid disk quota issues
     cache_dir = "/scratch/hf_cache"
     os.makedirs(cache_dir, exist_ok=True)
     print(f"Using cache directory: {cache_dir}")
@@ -193,8 +180,6 @@ def load_models(selected_models: List[str]):
     for model_id in selected_models:
         if model_id in HF_MODELS:
             model_name = HF_MODELS[model_id]
-
-            # Check if model is already loaded
             if model_name in loaded_hf_models:
                 model, tokenizer = loaded_hf_models[model_name]
                 print(f"Using already loaded HF model: {model_name}")
