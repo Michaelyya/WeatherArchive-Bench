@@ -31,6 +31,8 @@ DEEPSEEK_MODELS = {
     "17": "gemini-2.5-pro",
 }
 
-FILE_QUERY_ADDRESS = "run_retrievers/qa_pair/queries.csv"
-FILE_CONCATENATED_CHUNKS_ADDRESS = "run_retrievers/qa_pair/concatenated_chunks.csv"
-FILE_CORRECT_PASSAGES_ADDRESS = "run_retrievers/qa_pair/correct_passages.csv"
+FILE_QUERY_ADDRESS = "WeatherArchive_Retrieval/qa_pair/queries.csv"
+FILE_CONCATENATED_CHUNKS_ADDRESS = (
+    "WeatherArchive_Retrieval/qa_pair/concatenated_chunks.csv"
+)
+FILE_CORRECT_PASSAGES_ADDRESS = "WeatherArchive_Retrieval/qa_pair/correct_passages.csv"

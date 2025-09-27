@@ -4,6 +4,15 @@ __pycache__
 *.pyc
 .env
 raw_csv
+weather_chroma_store
+weather_chroma_store/
+embedding_loaders/
+venv
+.idea/
+__pycache__
+*.pyc
+.env
+raw_csv
 qa_pair
 weather_chroma_store
 weather_chroma_store/
