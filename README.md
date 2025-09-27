@@ -19,7 +19,7 @@ WXImpactRAG/
 │       ├── storm_English_*.csv       # Storm documents
 │       └── ...                       # Other weather phenomena
 │
-├── 📁 GroundTruth/                   # Ground truth datasets
+├── 📁 data/                   # Ground truth datasets
 │   ├── ground_truth_climate.csv      # Climate assessment ground truth
 │   ├── QACandidate_Pool.csv          # Question-answer candidate pool
 │   └── QACorrect_Passages.csv        # Correct passage annotations
