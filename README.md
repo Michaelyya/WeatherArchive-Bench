@@ -52,34 +52,22 @@ WXImpactRAG/
 
 ### WeatherArchive-Retrieval
 
+<div align="center">
+    <img src="./pics/weatherarchive-retrieval.jpg" alt="Link to PDF" height="auto" style="width:95%;">
+</div>
+
 **Objective**: Evaluate the effectiveness of various retrieval methods for historical weather data.
 
-**Methods Evaluated**:
-
-- **Sparse Retrieval**: BM25 variants (BM25Okapi, BM25Plus) with cross-encoder reranking
-- **Dense Retrieval**:
-  - SentenceTransformer models (SBERT, SPLADE)
-  - ANCE and UniCoil models
-  - Qwen embedding models (0.6B, 4B, 8B)
-  - OpenAI embedding models (text-embedding-3-large/small, ada-002)
-  - Arctic Embed 2.0 and Granite Embedding R2
-  - Google Gemini embedding models
 
 
 ### WeatherArchive-Assessment
 
+<div align="center">
+    <img src="./pics/weatherarchive-assessment.jpg" alt="Link to PDF" height="auto" style="width:95%;">
+</div>
+
 **Objective**: Evaluate LLM performance in societal vulnerability and resilience assessment related to extreme weather events based on a well-crafted framework referenced from prior meteorological research. 
 
-**Assessment Framework**:
-
-- **Vulnerability Components**:
-  - Exposure: Sudden-Onset | Slow-Onset | Compound hazards
-  - Sensitivity: Critical | Moderate | Low system dependence
-  - Adaptability: Robust | Constrained | Fragile response capacity
-- **Resilience Dimensions**:
-  - Temporal Scale: Short-term absorptive | Medium-term adaptive | Long-term transformative
-  - Functional System: Health | Energy | Food | Water | Transportation | Information
-  - Spatial Scale: Local | Regional | National
 
 ## 📊 Key Results Summary
 
