@@ -104,7 +104,7 @@ def main():
     parser.add_argument(
         "--ground-truth",
         "-gt",
-        default="WeatherArchive_Assessment/output/ground_truth_climate.csv",
+        default="data/ground_truth_climate.csv",
         help="Path to ground truth CSV file",
     )
     parser.add_argument(
@@ -116,7 +116,7 @@ def main():
     parser.add_argument(
         "--output-file",
         "-f",
-        default="MCQ_evaluation_summary.csv",
+        default="classification_evaluation_summary.csv",
         help="Output CSV file for summary results",
     )
 
