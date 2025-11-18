@@ -59,7 +59,6 @@ INSTRUCTIONS:
 - Synthesize the information; do not repeat text verbatim unless quoting is necessary for evidence.
 - Ensure that your answer is **directly relevant to the query** and grounded in the provided context.
 - Avoid adding information not supported by the provided chunks.
-- If the retrieved chunks are not relevant to the query, should claim there is no mention in the provided contexts.
 
 INPUT:
 Query: {query}
@@ -71,3 +70,13 @@ OUTPUT:
 """
 
 system_prompt = "You are a climate expert who creates structured vulnerability and resilience assessments following IPCC frameworks."
+
+RAG_Answering_prompt_without_context = """
+You are an expert in climate vulnerability and resilience. Use the retrieved document chunks to provide a comprehensive answer to the query.
+
+INPUT:
+Query: {query}
+
+OUTPUT:
+"""
+
