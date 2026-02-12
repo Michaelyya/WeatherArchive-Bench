@@ -1,5 +1,14 @@
 # WeatherArchive-Bench: Benchmarking Retrieval-Augmented Reasoning for Historical Weather Archives
 
+<p align="center">
+<a href='https://arxiv.org/html/2510.05336'><img src='https://img.shields.io/badge/arXiv-2510.05336-b31b1b.svg'></a>
+<a href='https://github.com/Michaelyya/WeatherArchive-Bench'><img src='https://img.shields.io/badge/GitHub-WeatherArchive-blue'></a>
+<a href="https://opensource.org/licenses/MIT" target="_blank"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
+<a href='https://huggingface.co/datasets/WxChat/WeatherArchiveBench' target="_blank">
+  <img alt="HuggingFace Dataset" src="https://img.shields.io/badge/HuggingFace-Dataset-orange.svg">
+</a>
+</p>
+
 This repository contains constructed datasets and evaluation frameworks for WeatherArchive-Bench. It comprises two tasks: WeatherArchive-Retrieval, which measures a system’s ability to locate historically relevant passages from over one million archival news segments, and WeatherArchive-Assessment, which evaluates whether Large Language Models (LLMs) can classify societal vulnerability and resilience indicators from extreme weather narratives.
 
 ## 📁 Project Structure
